@@ -31,7 +31,7 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 *
-*  Copyright 2018-2020 NXP
+*  Copyright 2018-2021 NXP
 *
 ******************************************************************************/
 
@@ -53,6 +53,7 @@
 #include "bt_types.h"
 #include "nci_hmsgs.h"
 #include "nfc_api.h"
+#include "nfc_int.h"
 #include "rw_api.h"
 #include "rw_int.h"
 
@@ -239,6 +240,38 @@ tNFC_STATUS RW_SetActivatedTagType(tNFC_ACTIVATE_DEVT* p_activate_params,
     return (NFC_STATUS_FAILED);
   }
 
+  switch (rw_cb.tcb_type) {
+    case RW_CB_TYPE_T1T: {
+      nfc_stop_quick_timer(&rw_cb.tcb.t1t.timer);
+      break;
+    }
+    case RW_CB_TYPE_T2T: {
+      nfc_stop_quick_timer(&rw_cb.tcb.t2t.t2_timer);
+      break;
+    }
+    case RW_CB_TYPE_T3T: {
+      nfc_stop_quick_timer(&rw_cb.tcb.t3t.timer);
+      nfc_stop_quick_timer(&rw_cb.tcb.t3t.poll_timer);
+      break;
+    }
+    case RW_CB_TYPE_T4T: {
+      nfc_stop_quick_timer(&rw_cb.tcb.t4t.timer);
+      break;
+    }
+    case RW_CB_TYPE_T5T: {
+      nfc_stop_quick_timer(&rw_cb.tcb.i93.timer);
+      break;
+    }
+    case RW_CB_TYPE_MIFARE: {
+      nfc_stop_quick_timer(&rw_cb.tcb.mfc.timer);
+      nfc_stop_quick_timer(&rw_cb.tcb.mfc.mfc_timer);
+      break;
+    }
+    case RW_CB_TYPE_UNKNOWN: {
+      break;
+    }
+  }
+
   /* Reset tag-specific area of control block */
   memset(&rw_cb.tcb, 0, sizeof(tRW_TCB));
 
@@ -258,12 +291,13 @@ tNFC_STATUS RW_SetActivatedTagType(tNFC_ACTIVATE_DEVT* p_activate_params,
     }
   } else if (NFC_PROTOCOL_T2T == p_activate_params->protocol) {
     /* Type2Tag    - NFC-A */
-    if ((p_activate_params->rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A)
-#if (NXP_EXTNS == TRUE)
-        ||
-        (p_activate_params->rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_WLC)
+#if (NXP_EXTNS != TRUE)
+    if (p_activate_params->rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A)
+#else
+    if ((p_activate_params->rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A) ||
+        (p_activate_params->rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_WLC))
 #endif
-    ) {
+    {
       rw_cb.tcb_type = RW_CB_TYPE_T2T;
       if (p_activate_params->rf_tech_param.param.pa.sel_rsp ==
           NFC_SEL_RES_NFC_FORUM_T2T)
@@ -285,7 +319,14 @@ tNFC_STATUS RW_SetActivatedTagType(tNFC_ACTIVATE_DEVT* p_activate_params,
     ) {
     /* ISODEP/4A,4B- NFC-A or NFC-B */
     if ((p_activate_params->rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_B) ||
-        (p_activate_params->rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A)) {
+        (p_activate_params->rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A)
+    /* NFC-Q */
+#if (NXP_EXTNS == TRUE)
+#if (NXP_QTAG == TRUE)
+        || (p_activate_params->rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_Q)
+#endif
+#endif
+    ) {
       rw_cb.tcb_type = RW_CB_TYPE_T4T;
       status = rw_t4t_select();
     }
@@ -298,6 +339,7 @@ tNFC_STATUS RW_SetActivatedTagType(tNFC_ACTIVATE_DEVT* p_activate_params,
   } else if (NFC_PROTOCOL_MIFARE == p_activate_params->protocol) {
     /* Mifare Classic*/
     if (p_activate_params->rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A) {
+      rw_cb.tcb_type = RW_CB_TYPE_MIFARE;
       status = rw_mfc_select(
           p_activate_params->rf_tech_param.param.pa.sel_rsp,
           p_activate_params->rf_tech_param.param.pa.nfcid1 +

@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2020 NXP
+ *  Copyright 2018-2021 NXP
  *
  ******************************************************************************/
 /******************************************************************************
@@ -436,6 +436,9 @@ typedef uint8_t tNCI_INTF_TYPE;
 #define NCI_DISCOVERY_TYPE_POLL_V 0x06
 #if (NXP_EXTNS == TRUE)
 #define NCI_DISCOVERY_TYPE_POLL_WLC 0x73
+#if (NXP_QTAG == TRUE)
+#define NCI_DISCOVERY_TYPE_POLL_Q 0x71
+#endif
 #endif
 #define NCI_DISCOVERY_TYPE_POLL_A_ACTIVE 0x03
 /* NCI2.0 standardizes P2P poll active*/
@@ -460,6 +463,12 @@ typedef uint8_t tNCI_DISCOVERY_TYPE;
 #define NCI_EE_TRIG_RF_PROTOCOL 0x01
 #define NCI_EE_TRIG_RF_TECHNOLOGY 0x02
 #define NCI_EE_TRIG_APP_INIT 0x10
+
+#if (NXP_EXTNS == TRUE)
+#define NCI_EE_TRIG_PROP_RSP_NTF 0xF2
+#define NCI_EE_TRIG_RF_PROT_PROP_RSP_NTF 0xF0
+#define NCI_EE_TRIG_RF_TECH_PROP_RSP_NTF 0xF1
+#endif
 
 #define NCI_EE_ACT_TAG_AID 0xC0   /* AID                 */
 #define NCI_EE_ACT_TAG_DATA 0xC3  /* hex data for app    */
@@ -683,6 +692,20 @@ typedef struct {
   uint8_t hr_len;  /* 2, if T1T HR0/HR1 is reported */
   uint8_t hr[NCI_T1T_HR_LEN]; /* T1T HR0 is in hr[0], HR1 is in hr[1] */
 } tNCI_RF_PA_PARAMS;
+
+#if (NXP_EXTNS == TRUE)
+#if (NXP_QTAG == TRUE)
+typedef struct {
+  uint8_t sens_res[2]; /* SENS_RES Response (ATQA). Available after Technology
+                          Detection */
+  uint8_t nfcid1_len;  /* 4, 7 or 10 */
+  uint8_t nfcid1[NCI_NFCID1_MAX_LEN]; /* AKA NFCID1 */
+  uint8_t sel_rsp; /* SEL_RSP (SAK) Available after Collision Resolution */
+  uint8_t hr_len;  /* 2, if T1T HR0/HR1 is reported */
+  uint8_t hr[NCI_T1T_HR_LEN]; /* T1T HR0 is in hr[0], HR1 is in hr[1] */
+} tNCI_RF_PQ_PARAMS;
+#endif
+#endif
 
 #define NCI_MAX_SENSB_RES_LEN 12
 typedef struct {

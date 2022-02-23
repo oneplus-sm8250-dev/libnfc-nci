@@ -154,9 +154,15 @@ typedef uint8_t tNFA_PMID;
 #define NFA_TECHNOLOGY_MASK_A_ACTIVE 0x40
 /* NFC Technology F active mode */
 #define NFA_TECHNOLOGY_MASK_F_ACTIVE 0x80
+#if (NXP_EXTNS == TRUE)
+#if (NXP_QTAG == TRUE)
+#define NFA_TECHNOLOGY_MASK_Q 0x100 /* Proprietary Technology       */
+#endif
 /* All supported technologies   */
+typedef uint16_t tNFA_TECHNOLOGY_MASK;
+#else
 typedef uint8_t tNFA_TECHNOLOGY_MASK;
-
+#endif
 /* Definitions for NFC protocol for RW, CE and P2P APIs */
 /* Type1Tag - NFC-A */
 #define NFA_PROTOCOL_T1T NFC_PROTOCOL_T1T
@@ -1595,5 +1601,27 @@ extern void NFA_SetFieldDetectMode(bool mode);
 **
 *******************************************************************************/
 extern bool NFA_IsFieldDetectEnabled();
+/*******************************************************************************
+**
+** Function         NFA_SetRssiMode
+**
+** Description      Updates RSSI mode true/false, This will be effective
+**                  from next RF discovery cycle.
+**
+** Returns          void
+**
+*******************************************************************************/
+extern void NFA_SetRssiMode(bool enable);
+
+/*******************************************************************************
+**
+** Function         NFA_IsRssiEnabled
+**
+** Description      Returns current status of RSSI mode
+**
+** Returns          true/false
+**
+*******************************************************************************/
+extern bool NFA_IsRssiEnabled();
 #endif
 #endif /* NFA_API_H */

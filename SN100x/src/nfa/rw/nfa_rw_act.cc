@@ -1972,6 +1972,11 @@ void nfa_rw_presence_check(tNFA_RW_MSG* p_data) {
       /* Let DM perform presence check (by putting tag to sleep and then waking
        * it up) */
       status = nfa_dm_disc_sleep_wakeup();
+#if (NXP_EXTNS == TRUE)
+      /* keeping it back to false to start presence check timer for all tags
+      except Kovio */
+      unsupported = false;
+#endif
     }
   }
 
@@ -1980,12 +1985,13 @@ void nfa_rw_presence_check(tNFA_RW_MSG* p_data) {
     nfa_rw_handle_presence_check_rsp(NFC_STATUS_FAILED);
   else if (!unsupported) {
 #if (NXP_EXTNS == TRUE)
-    if (protocol == NFC_PROTOCOL_T5T)
+    if (protocol == NFC_PROTOCOL_T5T) {
       p_nfa_dm_cfg->presence_check_timeout =
         NFA_DM_MAX_PRESENCE_CHECK_TIMEOUT + RW_I93_MAX_RSP_TIMEOUT;
+    }
 #endif
-      nfa_sys_start_timer(&nfa_rw_cb.tle, NFA_RW_PRESENCE_CHECK_TIMEOUT_EVT,
-                          p_nfa_dm_cfg->presence_check_timeout);
+    nfa_sys_start_timer(&nfa_rw_cb.tle, NFA_RW_PRESENCE_CHECK_TIMEOUT_EVT,
+                        p_nfa_dm_cfg->presence_check_timeout);
   }
 }
 
@@ -2772,22 +2778,25 @@ bool nfa_rw_activate_ntf(tNFA_RW_MSG* p_data) {
     memcpy(tag_params.t2t.uid, p_activate_params->rf_tech_param.param.pa.nfcid1,
            p_activate_params->rf_tech_param.param.pa.nfcid1_len);
   } else if (NFC_PROTOCOL_T3T == nfa_rw_cb.protocol) {
+#if (NXP_EXTNS == TRUE)
     if (appl_dta_mode_flag) {
       /* Incase of DTA mode Dont send commands to get system code. Just notify
        * activation */
       activate_notify = true;
     } else {
+#endif
       /* Delay notifying upper layer of NFA_ACTIVATED_EVT until system codes
        * are retrieved */
       activate_notify = false;
-
       /* Issue command to get Felica system codes */
       tNFA_RW_MSG msg;
       msg.op_req.op = NFA_RW_OP_T3T_GET_SYSTEM_CODES;
       bool free_buf = nfa_rw_handle_op_req(&msg);
       CHECK(free_buf)
           << "nfa_rw_handle_op_req is holding on to soon-garbage stack memory.";
+#if (NXP_EXTNS == TRUE)
     }
+#endif
   }
 #if (NXP_EXTNS == TRUE)
   else if (NFC_PROTOCOL_T3BT == nfa_rw_cb.protocol) {

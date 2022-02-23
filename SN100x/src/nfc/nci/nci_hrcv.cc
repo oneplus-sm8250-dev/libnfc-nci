@@ -44,6 +44,7 @@
 
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
+#include <log/log.h>
 
 #include "nfc_target.h"
 
@@ -293,6 +294,11 @@ void nci_proc_rf_management_ntf(NFC_HDR* p_msg) {
       break;
 
     case NCI_MSG_RF_DEACTIVATE:
+      if (p_msg->len < 5) {
+        /* NCI_HEADER(3) + Deactivation Type(1) + Deactivation Reason(1) */
+        android_errorWriteLog(0x534e4554, "164440989");
+        return;
+      }
       if (nfa_dm_p2p_prio_logic(op_code, pp, NFA_DM_P2P_PRIO_NTF) == false) {
         return;
       }
@@ -310,6 +316,10 @@ void nci_proc_rf_management_ntf(NFC_HDR* p_msg) {
       break;
 
     case NCI_MSG_RF_FIELD:
+      if (p_msg->len < 4) {
+        android_errorWriteLog(0x534e4554, "176582502");
+        return;
+      }
       nfc_ncif_proc_rf_field_ntf(*pp);
       break;
 
@@ -334,6 +344,10 @@ void nci_proc_rf_management_ntf(NFC_HDR* p_msg) {
 #endif
 #endif
     case NCI_MSG_RF_ISO_DEP_NAK_PRESENCE:
+      if (p_msg->len < 4) {
+        android_errorWriteLog(0x534e4554, "176582502");
+        return;
+      }
       nfc_ncif_proc_isodep_nak_presence_check_status(*pp, true);
       break;
     default:
@@ -360,7 +374,7 @@ void nci_proc_ee_management_rsp(NFC_HDR* p_msg) {
   tNFC_RESPONSE_CBACK* p_cback = nfc_cb.p_resp_cback;
   tNFC_RESPONSE nfc_response;
   tNFC_RESPONSE_EVT event = NFC_NFCEE_INFO_REVT;
-  uint8_t* p_old = nfc_cb.last_cmd;
+  uint8_t* p_old = nfc_cb.last_nfcee_cmd;
 
   /* find the start of the NCI message and parse the NCI header */
   p = (uint8_t*)(p_msg + 1) + p_msg->offset;
@@ -391,6 +405,8 @@ void nci_proc_ee_management_rsp(NFC_HDR* p_msg) {
         nfc_response.mode_set.status = *pp;
       } else {
         nfc_response.mode_set.status = NFC_STATUS_FAILED;
+        android_errorWriteLog(0x534e4554, "176203800");
+        return;
       }
       nfc_response.mode_set.nfcee_id = *p_old++;
       nfc_response.mode_set.mode = *p_old++;
@@ -437,9 +453,7 @@ void nci_proc_ee_management_ntf(NFC_HDR* p_msg) {
   tNFC_RESPONSE_CBACK* p_cback = nfc_cb.p_resp_cback;
   tNFC_RESPONSE nfc_response;
   tNFC_RESPONSE_EVT event = NFC_NFCEE_INFO_REVT;
-#if (NXP_EXTNS != TRUE)
-  uint8_t* p_old = nfc_cb.last_cmd;
-#endif
+  uint8_t* p_old = nfc_cb.last_nfcee_cmd;
 
   uint8_t xx;
   uint8_t yy;
@@ -513,13 +527,8 @@ void nci_proc_ee_management_ntf(NFC_HDR* p_msg) {
       } else {
         nfc_response.mode_set.status = *pp;
       }
-#if (NXP_EXTNS != TRUE)
       nfc_response.mode_set.nfcee_id = *p_old++;
       nfc_response.mode_set.mode = *p_old++;
-#else
-      nfc_response.mode_set.nfcee_id = nfa_ee_cb.nfcee_id;
-      nfc_response.mode_set.mode = nfa_ee_cb.mode;
-#endif
       event = NFC_NFCEE_MODE_SET_REVT;
       nfc_cb.flags &= ~NFC_FL_WAIT_MODE_SET_NTF;
       nfc_stop_timer(&nfc_cb.nci_mode_set_ntf_timer);

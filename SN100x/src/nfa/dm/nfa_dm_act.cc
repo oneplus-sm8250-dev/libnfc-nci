@@ -54,11 +54,12 @@
 
 #if (NFC_NFCEE_INCLUDED == TRUE)
 #include "nfa_ee_int.h"
-#include "nfc_int.h"
 #if (NXP_EXTNS == TRUE)
 #include "nfa_scr_int.h"
 #endif
 #endif
+
+#include "nfc_int.h"
 
 #if (NFA_SNEP_INCLUDED == TRUE)
 #include "nfa_snep_int.h"
@@ -1027,10 +1028,18 @@ tNFA_STATUS nfa_dm_start_polling(void) {
     if (poll_tech_mask & NFA_TECHNOLOGY_MASK_KOVIO) {
       poll_disc_mask |= NFA_DM_DISC_MASK_P_KOVIO;
     }
-#if (NXP_EXTNS == TRUE)
+
     if (!(nfc_cb.nci_interfaces & (1 << NCI_INTERFACE_NFC_DEP))) {
-      poll_disc_mask &= ~(NFA_DM_DISC_MASK_PACM_NFC_DEP|NFA_DM_DISC_MASK_PAA_NFC_DEP|
-                              NFA_DM_DISC_MASK_PFA_NFC_DEP|NFA_DM_DISC_MASK_PF_NFC_DEP);
+      /* Remove NFC-DEP related Discovery mask, if NFC_DEP interface is not
+       * supported */
+      poll_disc_mask &=
+          ~(NFA_DM_DISC_MASK_PACM_NFC_DEP | NFA_DM_DISC_MASK_PAA_NFC_DEP |
+            NFA_DM_DISC_MASK_PFA_NFC_DEP | NFA_DM_DISC_MASK_PF_NFC_DEP);
+    }
+
+#if (NXP_QTAG == TRUE)
+    if (poll_tech_mask & NFA_TECHNOLOGY_MASK_Q) {
+      poll_disc_mask |= NFA_DM_DISC_MASK_PQ_ISO_DEP;
     }
 #endif
 
@@ -1575,10 +1584,23 @@ static void nfa_dm_act_data_cback(__attribute__((unused)) uint8_t conn_id,
     NFC_SetStaticRfCback(nullptr);
   }
 #if (NXP_EXTNS == TRUE)
-    else if (event == NFC_ERROR_CEVT) {
+  else if (event == NFC_ERROR_CEVT) {
     LOG(ERROR) << StringPrintf(
           "received NFC_ERROR_CEVT with status = 0x%X", p_data->status);
       nfa_dm_rf_deactivate(NFA_DEACTIVATE_TYPE_DISCOVERY);
+  }
+#else
+  /* needed if CLF reports timeout, transmission or protocol error to notify DTA
+   * that may need to resume discovery if DH stays in POLL_ACTIVE state */
+  else if (appl_dta_mode_flag && (event == NFC_ERROR_CEVT)) {
+    if (p_data) {
+      evt_data.data.status = p_data->data.status;
+      nfa_dm_conn_cback_event_notify(NFA_RW_INTF_ERROR_EVT, &evt_data);
+    } else {
+      LOG(ERROR) << StringPrintf(
+          "received NFC_ERROR_CEVT with NULL data "
+          "pointer");
+    }
   }
 #endif
 }
@@ -1899,7 +1921,27 @@ void nfa_dm_notify_activation_status(tNFA_STATUS status,
         nfcid_len = p_tech_params->param.pa.nfcid1_len;
         p_nfcid = p_tech_params->param.pa.nfcid1;
       }
-    } else if (p_tech_params->mode == NFC_DISCOVERY_TYPE_POLL_B) {
+    }
+#if (NXP_EXTNS == TRUE)
+#if (NXP_QTAG == TRUE)
+    else if (p_tech_params->mode == NFC_DISCOVERY_TYPE_POLL_Q) {
+      if ((p_tech_params->param.pq.nfcid1_len == 0) && (p_params != nullptr)) {
+        nfcid_len = sizeof(p_params->t1t.uid);
+        p_nfcid = p_params->t1t.uid;
+        evt_data.activated.activate_ntf.rf_tech_param.param.pq.nfcid1_len =
+            nfcid_len;
+        if (nfcid_len > 0 && p_nfcid != nullptr) {
+          memcpy(evt_data.activated.activate_ntf.rf_tech_param.param.pq.nfcid1,
+                 p_nfcid, nfcid_len);
+        }
+      } else {
+        nfcid_len = p_tech_params->param.pq.nfcid1_len;
+        p_nfcid = p_tech_params->param.pq.nfcid1;
+      }
+    }
+#endif
+#endif
+    else if (p_tech_params->mode == NFC_DISCOVERY_TYPE_POLL_B) {
       nfcid_len = NFC_NFCID0_MAX_LEN;
       p_nfcid = p_tech_params->param.pb.nfcid0;
 #if (NXP_EXTNS == TRUE)

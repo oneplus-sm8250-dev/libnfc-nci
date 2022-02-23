@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2019-2020 NXP
+ *  Copyright 2019-2021 NXP
  *
  ******************************************************************************/
 #include <errno.h>
@@ -114,8 +114,8 @@ void* gki_task_entry(void* params) {
   /* Call the actual thread entry point */
   (p_pthread_info->task_entry)(p_pthread_info->params);
 
-  LOG(ERROR) << StringPrintf("gki_task task_id=%i terminating",
-                             p_pthread_info->task_id);
+  LOG(WARNING) << StringPrintf("gki_task task_id=%i terminating",
+                               p_pthread_info->task_id);
 #if (NXP_EXTNS == TRUE)
   memset(&(gki_cb.os.thread_id[p_pthread_info->task_id]), 0, sizeof(pthread_t));
 #else
@@ -313,7 +313,6 @@ void GKI_shutdown(void) {
    * GKI_exception problem due to btu->hci sleep request events  */
   for (task_id = GKI_MAX_TASKS; task_id > 0; task_id--) {
     if (gki_cb.com.OSRdyTbl[task_id - 1] != TASK_DEAD) {
-      gki_cb.com.OSRdyTbl[task_id - 1] = TASK_DEAD;
       /* paranoi settings, make sure that we do not execute any mailbox events
        */
       gki_cb.com.OSWaitEvt[task_id - 1] &=
@@ -323,7 +322,7 @@ void GKI_shutdown(void) {
 #if (NXP_EXTNS == TRUE)
       if (((task_id - 1) == BTU_TASK)) {
         gki_cb.com.system_tick_running = false;
-        *p_run_cond = GKI_TIMER_TICK_STOP_COND; /* stop system tick */
+        *p_run_cond = GKI_TIMER_TICK_EXIT_COND; /* stop system tick */
       }
 #endif
 #if (FALSE == GKI_PTHREAD_JOINABLE)
@@ -498,14 +497,6 @@ void GKI_run(__attribute__((unused)) void* p_task_id) {
       GKI_timer_update(1);
     } while (GKI_TIMER_TICK_RUN_COND == *p_run_cond);
 
-#if(NXP_EXTNS == TRUE)
-   /* when stop condition is set & state is set to
-     * dead shall clear wait event to avoid shut down delay*/
-    if(gki_cb.com.OSRdyTbl[BTU_TASK] == TASK_DEAD) {
-      gki_cb.com.OSWaitEvt[BTU_TASK] = 0;
-    }
-#endif
-
 /* currently on reason to exit above loop is no_timer_suspend ==
  * GKI_TIMER_TICK_STOP_COND
  * block timer main thread till re-armed by  */
@@ -524,6 +515,9 @@ void GKI_run(__attribute__((unused)) void* p_task_id) {
         << StringPrintf(">>> RESTARTED run_cond: %d", *p_run_cond);
 #endif
   } /* for */
+#endif
+#if(NXP_EXTNS == TRUE)
+  gki_cb.com.OSWaitEvt[BTU_TASK] = 0;
 #endif
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s exit", __func__);
 }
@@ -667,13 +661,13 @@ uint16_t GKI_wait(uint16_t flag, uint32_t timeout) {
     if (gki_cb.com.OSTaskQFirst[rtask][3])
       gki_cb.com.OSWaitEvt[rtask] |= TASK_MBOX_3_EVT_MASK;
 
-    if (gki_cb.com.OSRdyTbl[rtask] == TASK_DEAD) {
+    if (gki_cb.com.OSWaitEvt[rtask] == EVENT_MASK(GKI_SHUTDOWN_EVT)) {
       gki_cb.com.OSWaitEvt[rtask] = 0;
       /* unlock thread_evt_mutex as pthread_cond_wait() does auto lock when cond
        * is met */
       pthread_mutex_unlock(&gki_cb.os.thread_evt_mutex[rtask]);
-      LOG(ERROR) << StringPrintf("GKI TASK_DEAD received. exit thread %d...",
-                                 rtask);
+      LOG(WARNING) << StringPrintf("GKI TASK_DEAD received. exit thread %d...",
+                                   rtask);
 #if (NXP_EXTNS == TRUE)
       memset(&(gki_cb.os.thread_id[rtask]), 0, sizeof(pthread_t));
 #else
@@ -1118,6 +1112,11 @@ void GKI_exit_task(uint8_t task_id) {
     return;
   }
   GKI_disable();
+  if (gki_cb.com.OSRdyTbl[task_id] == TASK_DEAD) {
+      GKI_enable();
+      LOG(WARNING) << StringPrintf("%s: task_id %d was already stopped.", __func__, task_id);
+      return;
+  }
   gki_cb.com.OSRdyTbl[task_id] = TASK_DEAD;
 
   /* Destroy mutex and condition variable objects */

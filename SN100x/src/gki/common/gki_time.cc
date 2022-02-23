@@ -2,8 +2,6 @@
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
- *  Copyright 2019 NXP
- *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
  *  You may obtain a copy of the License at:
@@ -15,6 +13,24 @@
  *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
+ *
+ ******************************************************************************/
+/******************************************************************************
+ *
+ *  Copyright 2019,2021 NXP
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
  *
  ******************************************************************************/
 #include <android-base/stringprintf.h>
@@ -189,6 +205,14 @@ void GKI_start_timer(uint8_t tnum, int32_t ticks, bool is_continuous) {
   int32_t orig_ticks;
   uint8_t task_id = GKI_get_taskid();
   bool bad_timer = false;
+
+#if (NXP_EXTNS == TRUE)
+  if (task_id >= GKI_MAX_TASKS) {
+    LOG(ERROR) << StringPrintf(
+    "%s: invalid task_id:0x%02x. start timer failed", __func__, task_id);
+    return;
+  }
+#endif
 
   if (ticks <= 0) ticks = 1;
 

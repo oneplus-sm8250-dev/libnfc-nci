@@ -39,24 +39,23 @@
  *  This file contains the action functions for NFA-EE
  *
  ******************************************************************************/
-#include <string.h>
-
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
+#include <statslog.h>
+#include <string.h>
 
+#include "include/debug_lmrt.h"
+#include "metrics.h"
 #include "nfa_api.h"
 #include "nfa_dm_int.h"
 #include "nfa_ee_int.h"
 #include "nfa_hci_int.h"
+#include "nfc_int.h"
 #if (NXP_EXTNS == TRUE)
 #include "nfa_nfcee_int.h"
 #include "nfa_scr_int.h"
 #include "nfc_config.h"
-#include "nfc_int.h"
 #endif
-
-#include <statslog.h>
-#include "metrics.h"
 
 using android::base::StringPrintf;
 
@@ -449,7 +448,7 @@ static void nfa_ee_add_proto_route_to_ecb(tNFA_EE_ECB* p_cb, uint8_t* pp,
                                   NCI_ROUTE_PWR_STATE_ON, NFC_PROTOCOL_NFC_DEP);
           DLOG_IF(INFO, nfc_debug_enabled)
               << StringPrintf("%s - NFC DEP added for DH!!!", __func__);
-        }else {
+        } else {
           continue;
         }
       } else {
@@ -616,6 +615,9 @@ static void nfa_ee_conn_cback(uint8_t conn_id, tNFC_CONN_EVT event,
                               tNFC_CONN* p_data) {
   tNFA_EE_NCI_CONN cbk;
 
+#if (NXP_EXTNS == TRUE)
+  memset(&cbk, 0, sizeof(tNFA_EE_NCI_CONN));
+#endif
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
       "nfa_ee_conn_cback: conn_id: %d, event=0x%02x", conn_id, event);
 
@@ -1548,7 +1550,7 @@ void nfa_ee_api_remove_aid(tNFA_EE_MSG* p_data) {
   }
 #endif
   else {
-    LOG(ERROR) << StringPrintf(
+    LOG(WARNING) << StringPrintf(
         "nfa_ee_api_remove_aid The AID entry is not in the database");
     evt_data.status = NFA_STATUS_INVALID_PARAM;
   }
@@ -2525,8 +2527,8 @@ void nfa_ee_nci_mode_set_rsp(tNFA_EE_MSG* p_data) {
   /* update routing table and vs on mode change */
   nfa_ee_start_timer();
 #endif
-  LOG(ERROR) << StringPrintf("%s p_rsp->status:0x%02x", __func__,
-                             p_rsp->status);
+  LOG(WARNING) << StringPrintf("%s p_rsp->status:0x%02x", __func__,
+                               p_rsp->status);
   if (p_rsp->status == NFA_STATUS_OK) {
     if (p_rsp->mode == NFA_EE_MD_ACTIVATE) {
 #if (NXP_EXTNS == TRUE)
@@ -2628,7 +2630,9 @@ void nfa_ee_report_update_evt(void) {
 
     if (nfa_ee_cb.ee_wait_evt & NFA_EE_WAIT_UPDATE) {
       nfa_ee_cb.ee_wait_evt &= ~NFA_EE_WAIT_UPDATE;
-      /* finished updating NFCC; report NFA_EE_UPDATED_EVT now */
+      /* finished updating NFCC; record the committed listen mode routing
+       * configuration command; report NFA_EE_UPDATED_EVT now */
+      lmrt_update();
       evt_data.status = NFA_STATUS_OK;
       nfa_ee_report_event(nullptr, NFA_EE_UPDATED_EVT, &evt_data);
     }
@@ -2778,6 +2782,9 @@ void nfa_ee_nci_action_ntf(tNFA_EE_MSG* p_data) {
   tNFC_EE_ACTION_REVT* p_cbk = p_data->act.p_data;
   tNFA_EE_ACTION evt_data;
 
+#if (NXP_EXTNS == TRUE)
+  memset(&evt_data, 0, sizeof(tNFA_EE_ACTION));
+#endif
   evt_data.ee_handle = (tNFA_HANDLE)p_cbk->nfcee_id | NFA_HANDLE_GROUP_EE;
   evt_data.trigger = p_cbk->act_data.trigger;
   memcpy(&(evt_data.param), &(p_cbk->act_data.param),
