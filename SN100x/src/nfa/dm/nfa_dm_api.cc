@@ -437,6 +437,37 @@ bool NFA_IsFieldDetectEnabled() {
                       (nfa_dm_cb.isFieldDetectEnabled) ? "ENABLE" : "DISABLE");
   return nfa_dm_cb.isFieldDetectEnabled;
 }
+/*******************************************************************************
+**
+** Function         NFA_SetRssiMode
+**
+** Description      Updates RSSI mode true/false
+**
+** Returns          void
+**
+*******************************************************************************/
+void NFA_SetRssiMode(bool enable) {
+  nfa_dm_cb.isRssiEnabled = enable;
+  DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s rssiMode = 0x%s", __func__,
+                      (nfa_dm_cb.isRssiEnabled) ? "ENABLE" : "DISABLE");
+}
+
+/*******************************************************************************
+**
+** Function         NFA_IsRssiEnabled
+**
+** Description      Returns current status of RSSI mode
+**
+** Returns          true/false
+**
+*******************************************************************************/
+bool NFA_IsRssiEnabled() {
+  DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s Current rssiMode = 0x%s", __func__,
+                      (nfa_dm_cb.isRssiEnabled) ? "ENABLE" : "DISABLE");
+  return nfa_dm_cb.isRssiEnabled;
+}
 #endif
 /*******************************************************************************
 **
@@ -939,7 +970,8 @@ tNFA_STATUS NFA_SetRfDiscoveryDuration(uint16_t discovery_period_ms) {
   DLOG_IF(INFO, nfc_debug_enabled) << __func__;
 
   /* Post the API message */
-  p_msg = (tNFA_DM_API_SET_RF_DISC_DUR*)GKI_getbuf(sizeof(NFC_HDR));
+  p_msg = (tNFA_DM_API_SET_RF_DISC_DUR*)GKI_getbuf(
+      sizeof(tNFA_DM_API_SET_RF_DISC_DUR));
   if (p_msg != nullptr) {
     p_msg->hdr.event = NFA_DM_API_SET_RF_DISC_DURATION_EVT;
 
@@ -1513,6 +1545,7 @@ tNFA_MW_VERSION NFA_GetMwVersion() {
   mwVer.validation = (NXP_EN_SN100U << 13);
   mwVer.validation |= (NXP_EN_SN110U << 14);
   mwVer.validation |= (NXP_EN_SN220U << 15);
+  mwVer.validation |= (NXP_EN_PN557 << 11);
   mwVer.android_version = NXP_ANDROID_VER;
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("0x%x:NFC MW Major Version:", NFC_NXP_MW_VERSION_MAJ);

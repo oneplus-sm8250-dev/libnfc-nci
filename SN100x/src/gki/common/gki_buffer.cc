@@ -36,6 +36,7 @@
 ******************************************************************************/
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
+#include <log/log.h>
 #include "gki_int.h"
 
 #if (GKI_NUM_TOTAL_BUF_POOLS > 16)
@@ -279,8 +280,9 @@ void* GKI_getbuf(uint16_t size) {
   FREE_QUEUE_T* Q;
 
 #if defined(DYN_ALLOC) || defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
-  if (size == 0) {
-    LOG(ERROR) << StringPrintf("getbuf: Size is zero");
+  if (size == 0 || size > (USHRT_MAX - 3)) {
+    LOG(ERROR) << StringPrintf("getbuf: Requested size(%d) is invalid", size);
+    android_errorWriteLog(0x534e4554, "205729183");
 #ifndef DYN_ALLOC
     abort();
 #else
@@ -1363,10 +1365,35 @@ void GKI_delete_pool(uint8_t pool_id) {
 **
 *******************************************************************************/
 uint16_t GKI_get_pool_bufsize(uint8_t pool_id) {
+#if defined(DYN_ALLOC) || defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+  uint16_t size = 0;
+  switch (pool_id) {
+    case GKI_POOL_ID_0:
+      size = GKI_BUF0_SIZE;
+      break;
+    case GKI_POOL_ID_1:
+      size = GKI_BUF1_SIZE;
+      break;
+    case GKI_POOL_ID_2:
+      size = GKI_BUF2_SIZE;
+      break;
+    case GKI_POOL_ID_3:
+      size = GKI_BUF3_SIZE;
+      break;
+      /* Here could be more pool ids, but they are not used in the current
+       * implementation */
+    default:
+      LOG(ERROR) << StringPrintf("Unknown pool ID: %d", pool_id);
+      return (0);
+      break;
+  }
+  return (size);
+#else
   if (pool_id < GKI_NUM_TOTAL_BUF_POOLS)
     return (gki_cb.com.freeq[pool_id].size);
 
   return (0);
+#endif
 }
 
 /*******************************************************************************

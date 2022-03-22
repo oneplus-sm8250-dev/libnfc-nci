@@ -2,8 +2,6 @@
  *
  *  Copyright (C) 1999-2012 Broadcom Corporation
  *
- *  Copyright (C) 2018-2020 NXP
- *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
  *  You may obtain a copy of the License at:
@@ -17,11 +15,26 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
+/******************************************************************************
+*
+*  Licensed under the Apache License, Version 2.0 (the "License");
+*  you may not use this file except in compliance with the License.
+*  You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+*  Unless required by applicable law or agreed to in writing, software
+*  distributed under the License is distributed on an "AS IS" BASIS,
+*  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+*  See the License for the specific language governing permissions and
+*  limitations under the License.
+*
+*  Copyright 2018-2021 NXP
+*
+******************************************************************************/
 #include <android-base/stringprintf.h>
 #include <android/hardware/nfc/1.1/INfc.h>
 #include <android/hardware/nfc/1.2/INfc.h>
-#include <vendor/nxp/hardware/nfc/2.0/INqNfc.h>
 #include <base/command_line.h>
 #include <base/logging.h>
 #include <cutils/properties.h>
@@ -29,11 +42,14 @@
 
 #include "NfcAdaptation.h"
 #include "debug_nfcsnoop.h"
+#if (NXP_EXTNS == TRUE)
+#include <vendor/nxp/hardware/nfc/2.0/INqNfc.h>
+#include <hidl/LegacySupport.h>
+#endif
 #include "nfa_api.h"
 #include "nfa_rw_api.h"
 #include "nfc_config.h"
 #include "nfc_int.h"
-#include <hidl/LegacySupport.h>
 
 using ::android::wp;
 using ::android::hardware::hidl_death_recipient;
@@ -53,15 +69,15 @@ using INfcV1_1 = android::hardware::nfc::V1_1::INfc;
 using INfcV1_2 = android::hardware::nfc::V1_2::INfc;
 using NfcVendorConfigV1_1 = android::hardware::nfc::V1_1::NfcConfig;
 using NfcVendorConfigV1_2 = android::hardware::nfc::V1_2::NfcConfig;
-using vendor::nxp::hardware::nfc::V2_0::INqNfc;
 using android::hardware::nfc::V1_1::INfcClientCallback;
 using android::hardware::hidl_vec;
-using android::hardware::hidl_death_recipient;
-using android::hardware::configureRpcThreadpool;
 #if (NXP_EXTNS == TRUE)
+using android::hardware::configureRpcThreadpool;
+using vendor::nxp::hardware::nfc::V2_0::INqNfc;
 using ::android::hardware::nfc::V1_0::NfcStatus;
 
 ThreadMutex NfcAdaptation::sIoctlLock;
+sp<INqNfc> NfcAdaptation::mNqHal_2_0;
 #endif
 extern bool nfc_debug_enabled;
 
@@ -75,25 +91,24 @@ tHAL_NFC_CBACK* NfcAdaptation::mHalCallback = nullptr;
 tHAL_NFC_DATA_CBACK* NfcAdaptation::mHalDataCallback = nullptr;
 ThreadCondVar NfcAdaptation::mHalOpenCompletedEvent;
 #if (NXP_EXTNS == TRUE)
-ThreadCondVar NfcAdaptation::mHalDataCallbackEvent;
+sem_t NfcAdaptation::mSemHalDataCallBackEvent;
 #endif
 
 sp<INfc> NfcAdaptation::mHal;
 sp<INfcV1_1> NfcAdaptation::mHal_1_1;
 sp<INfcV1_2> NfcAdaptation::mHal_1_2;
 INfcClientCallback* NfcAdaptation::mCallback;
-sp<INqNfc> NfcAdaptation::mNqHal_2_0;
 
 bool nfc_debug_enabled = false;
 std::string nfc_storage_path;
 uint8_t appl_dta_mode_flag = 0x00;
+bool isDownloadFirmwareCompleted = false;
 
 extern tNFA_DM_CFG nfa_dm_cfg;
 extern tNFA_PROPRIETARY_CFG nfa_proprietary_cfg;
 extern tNFA_HCI_CFG nfa_hci_cfg;
 extern uint8_t nfa_ee_max_ee_cfg;
 extern bool nfa_poll_bail_out_mode;
-bool isDownloadFirmwareCompleted = false;
 #if (NXP_EXTNS == TRUE)
 uint8_t fw_dl_status = (uint8_t)NfcHalFwUpdateStatus::HAL_NFC_FW_UPDATE_INVALID;
 #endif
@@ -108,14 +123,9 @@ void initializeGlobalDebugEnabledFlag() {
   nfc_debug_enabled =
       (NfcConfig::getUnsigned(NAME_NFC_DEBUG_ENABLED, 0) != 0) ? true : false;
 
-  char valueStr[PROPERTY_VALUE_MAX] = {0};
-  int len = property_get("nfc.debug_enabled", valueStr, "");
-  if (len > 0) {
-    // let Android property override .conf variable
-    unsigned debug_enabled = 0;
-    sscanf(valueStr, "%u", &debug_enabled);
-    nfc_debug_enabled = (debug_enabled == 0) ? false : true;
-  }
+  bool debug_enabled = property_get_bool("persist.nfc.debug_enabled", false);
+
+  nfc_debug_enabled = (nfc_debug_enabled || debug_enabled);
 
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: level=%u", __func__, nfc_debug_enabled);
@@ -604,14 +614,12 @@ void NfcAdaptation::InitializeHalDeviceContext() {
     mHal->linkToDeath(mNfcHalDeathRecipient, 0);
   }
 #if (NXP_EXTNS == TRUE)
-  LOG(INFO) << StringPrintf("%s: Trying INqNfc V2_0::getService()", func);
-  mNqHal_2_0 = INqNfc::getService();
-  if(mNqHal_2_0 == nullptr) {
-      LOG(INFO) << StringPrintf ("Failed to retrieve the vendor NFC HAL!");
-  } else {
-      LOG(INFO) << StringPrintf("%s: INqNfc::getService() returned %p (%s)", func,
-                        mNqHal_2_0.get(),
-                        (mNqHal_2_0->isRemote() ? "remote" : "local"));
+  LOG(INFO) << StringPrintf("%s: INqNfc::tryGetService()", func);
+  mNqHal_2_0 = INqNfc::tryGetService();
+  if (mNqHal_2_0 != nullptr) {
+    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: INqNfc::getService() returned %p (%s)",
+             func, mNqHal_2_0.get(),
+             (mNqHal_2_0->isRemote() ? "remote" : "local"));
   }
 
   mHalEntryFuncs.set_transit_config = HalSetTransitConfig;
@@ -884,9 +892,31 @@ bool NfcAdaptation::resetEse(uint64_t level) {
 *******************************************************************************/
 void NfcAdaptation::HalWriteIntf(uint16_t data_len, uint8_t* p_data) {
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: Enter ", __func__);
-  mHalDataCallbackEvent.lock();
+  int semval = 0;
+  int sem_timedout = 2, s;
+
+  sem_getvalue(&mSemHalDataCallBackEvent, &semval);
+  //Reset semval to 0x00
+  while (semval > 0x00) {
+    s = sem_wait(&mSemHalDataCallBackEvent);
+    if (s == -1) {
+      ALOGE("%s: sem_wait failed !!!", __func__);
+    }
+    sem_getvalue(&mSemHalDataCallBackEvent, &semval);
+  }
+
   HalWrite(data_len, p_data);
-  mHalDataCallbackEvent.wait();
+
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  ts.tv_sec += sem_timedout;
+  while ((s = sem_timedwait(&mSemHalDataCallBackEvent, &ts)) == -1 &&
+           errno == EINTR){
+    continue;
+  }
+  if (s == -1) {
+    ALOGE("%s: sem_timedout Timed Out !!!", __func__);
+  }
 }
 #endif
 /*******************************************************************************
@@ -1013,6 +1043,9 @@ bool NfcAdaptation::DownloadFirmware() {
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: try open HAL", func);
 #if (NXP_EXTNS == TRUE)
   NfcStatus status;
+  if (0 != sem_init(&mSemHalDataCallBackEvent, 0, 0)) {
+    return isDownloadFirmwareCompleted;
+  }
   mCallback = new NfcClientCallback(HalDownloadFirmwareCallback, HalDownloadFirmwareDataCallback);
   if (mHal_1_1 != nullptr) {
     status = mHal_1_1->open_1_1(mCallback);
@@ -1036,6 +1069,7 @@ bool NfcAdaptation::DownloadFirmware() {
           (fw_dl_status != (uint8_t)NfcHalFwUpdateStatus::HAL_NFC_FW_UPDATE_INVALID)) {
     (*NfcAdaptation::GetInstance().p_fwupdate_status_cback)(fw_dl_status);
   }
+  sem_destroy(&mSemHalDataCallBackEvent);
 #else
   HalOpen(HalDownloadFirmwareCallback, HalDownloadFirmwareDataCallback);
   mHalOpenCompletedEvent.wait();
@@ -1126,9 +1160,11 @@ void NfcAdaptation::NFA_SetBootMode(uint8_t boot_mode) {
 ** Returns          none
 **
 *******************************************************************************/
+#if (NXP_EXTNS == TRUE)
 uint8_t NfcAdaptation::NFA_GetBootMode() {
   return nfcBootMode;
 }
+#endif
 /*******************************************************************************
 **
 ** Function:    NfcAdaptation::HalDownloadFirmwareDataCallback
@@ -1154,12 +1190,12 @@ void NfcAdaptation::HalDownloadFirmwareDataCallback(
           p_data++;
           nfc_ncif_proc_reset_rsp(p_data, is_ntf);
           if(is_ntf)
-            mHalDataCallbackEvent.signal();
+            sem_post(&mSemHalDataCallBackEvent);
         }
         break;
       case NCI_MSG_CORE_INIT:
         if (mt == NCI_MT_RSP)
-          mHalDataCallbackEvent.signal();
+          sem_post(&mSemHalDataCallBackEvent);
         break;
     }
   }

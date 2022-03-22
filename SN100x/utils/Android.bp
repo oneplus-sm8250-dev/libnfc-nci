@@ -59,6 +59,7 @@ cc_test {
     static_libs: [
         "libsn100nfcutils",
         "libgmock",
+        "libc++fs"
     ],
     shared_libs: [
         "libbase",

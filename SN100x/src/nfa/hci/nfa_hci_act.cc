@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2021 NXP
+ *  Copyright 2018-2022 NXP
  *
  ******************************************************************************/
 /******************************************************************************
@@ -1425,6 +1425,11 @@ void nfa_hci_handle_admin_gate_cmd(uint8_t* p_data) {
           if(source_host == NFA_HCI_FIRST_PROP_HOST) {
             NFA_SCR_PROCESS_EVT(NFA_SCR_ESE_RECOVERY_START_EVT, NFA_STATUS_OK);
           }
+          if (nfa_ee_cb.require_rf_restart &&
+              nfa_dm_cb.disc_cb.disc_state != NFA_DM_RFST_IDLE) {
+            nfa_ee_cb.ee_flags |= NFA_EE_FLAG_RECOVERY;
+            nfa_dm_act_stop_rf_discovery(NULL);
+          }
           nfa_hciu_send_msg(NFA_HCI_ADMIN_PIPE, NFA_HCI_RESPONSE_TYPE, response,
               rsp_len, &data);
           /* If starting up, handle events here */
@@ -2710,11 +2715,19 @@ void nfa_hci_handle_pending_host_reset() {
         nfa_hci_handle_clear_all_pipe_cmd(nfa_hci_cb.reset_host[xx].host_id);
         break;
       } else if (nfa_hci_cb.reset_host[xx].reset_cfg & NFCEE_UNRECOVERABLE_ERRROR) {
-          nfa_hci_release_transceive(nfa_hci_cb.reset_host[xx].host_id, NFA_STATUS_HCI_UNRECOVERABLE_ERROR);
+          nfa_hci_release_transceive(nfa_hci_cb.reset_host[xx].host_id,
+                                     NFA_STATUS_HCI_UNRECOVERABLE_ERROR);
           nfa_hci_cb.curr_nfcee = nfa_hci_cb.reset_host[xx].host_id;
           nfa_hci_cb.next_nfcee_idx = 0x00;
-          if(NFC_NfceeDiscover(true) == NFC_STATUS_FAILED) {
-            DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("NFCEE_UNRECOVERABLE_ERRROR unable to handle");
+          if (!nfa_hciu_check_host_resetting(nfa_hci_cb.reset_host[xx].host_id,
+                                           NFCEE_RECOVERY_IN_PROGRESS)) {
+            if (NFC_NfceeDiscover(true) == NFC_STATUS_FAILED) {
+              DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+                  "NFCEE_UNRECOVERABLE_ERRROR unable to handle");
+            }
+          } else {
+            DLOG_IF(INFO, nfc_debug_enabled)
+                << StringPrintf("NFCEE re-initialization ongoing..........");
           }
           break;
         }
@@ -3104,13 +3117,6 @@ static void nfa_hci_handle_apdu_app_gate_hcp_msg_data (uint8_t *p_data, uint16_t
                   }
                 }
                 /* More processing time needed for APDU sent to UICC */
-#if (NXP_EXTNS == TRUE)
-                /*Do not restart the timer if atr response not received. This
-                 * allows timeout in case atr response is not received at
-                 * all, which helps upper layer API to unblock and take necessary
-                 * action*/
-                if (!p_pipe_cmdrsp_info->w4_atr_evt)
-#endif
                 nfa_sys_start_timer (&(p_pipe_cmdrsp_info->rsp_timer),
                           NFA_HCI_RSP_TIMEOUT_EVT, p_pipe_cmdrsp_info->rsp_timeout);
                 DLOG_IF(INFO, nfc_debug_enabled)
@@ -3312,7 +3318,6 @@ static bool nfa_hci_api_abort_apdu (tNFA_HCI_EVENT_DATA *p_evt_data)
     uint8_t                     pipe_id = 0;;
     tNFC_STATUS                 status = NFA_STATUS_FAILED;
     bool                        send_abort_ntf = FALSE;
-    bool                        apdu_dropped = FALSE;
     bool                        host_reseting = FALSE;
     tNFA_HCI_EVT_DATA           evt_data;
     tNFA_HCI_DYN_PIPE           *p_pipe;
@@ -3347,7 +3352,6 @@ static bool nfa_hci_api_abort_apdu (tNFA_HCI_EVENT_DATA *p_evt_data)
                     GKI_remove_from_queue (&nfa_hci_cb.hci_host_reset_api_q, p_msg);
                     GKI_freebuf (p_msg);
 
-                    apdu_dropped = true;
                     break;
                 }
             }

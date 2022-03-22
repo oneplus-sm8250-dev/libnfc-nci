@@ -327,6 +327,11 @@ typedef uint8_t tNFA_DM_RF_DISC_EVT;
 #define NFA_DM_DISC_MASK_PB_ISO_DEP 0x00000010
 #define NFA_DM_DISC_MASK_PF_T3T 0x00000020
 #define NFA_DM_DISC_MASK_PF_NFC_DEP 0x00000040
+#if (NXP_EXTNS == TRUE)
+#if (NXP_QTAG == TRUE)
+#define NFA_DM_DISC_MASK_PQ_ISO_DEP 0x00000080
+#endif
+#endif
 #define NFA_DM_DISC_MASK_P_T5T 0x00000100
 #define NFA_DM_DISC_MASK_P_B_PRIME 0x00000200
 #define NFA_DM_DISC_MASK_P_KOVIO 0x00000400
@@ -616,6 +621,7 @@ typedef struct {
   tNFA_TECHNOLOGY_MASK        listenTech;
   uint8_t selected_uicc_id; /* Current selected UICC ID */
   bool isFieldDetectEnabled; /*Field Detect Enable status*/
+  bool isRssiEnabled;        /*RSSI Enable status*/
 #endif
 } tNFA_DM_CB;
 

@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2021 NXP
+ *  Copyright 2018-2022 NXP
  *
  ******************************************************************************/
 
@@ -139,13 +139,17 @@ void nfa_hci_ee_info_cback(tNFA_EE_DISC_STS status) {
           int xx;
           for (xx = 0; xx < NFA_HCI_MAX_HOST_IN_NETWORK; xx++) {
               if(nfa_hci_cb.reset_host[xx].reset_cfg & NFCEE_UNRECOVERABLE_ERRROR) {
-                  nfa_hciu_clear_host_resetting(nfa_hci_cb.curr_nfcee, NFCEE_UNRECOVERABLE_ERRROR);
-                  /* Discovery operation is complete, retrieve discovery result */
-                  nfa_hci_cb.num_nfcee = NFA_HCI_MAX_HOST_IN_NETWORK;
-                  NFA_EeGetInfo(&nfa_hci_cb.num_nfcee, nfa_hci_cb.ee_info);
-                  for (int yy = 0; yy < nfa_hci_cb.num_nfcee; yy++) {
-                      nfa_hci_cb.ee_info[yy].hci_enable_state = NFA_HCI_FL_EE_NONE;
-                      nfa_hciu_add_host_resetting((nfa_hci_cb.ee_info[yy].ee_handle & ~NFA_HANDLE_GROUP_EE), NFCEE_REINIT);
+                nfa_hciu_clear_host_resetting(
+                    nfa_hci_cb.curr_nfcee,
+                    NFCEE_UNRECOVERABLE_ERRROR | NFCEE_RECOVERY_IN_PROGRESS);
+                /* Discovery operation is complete, retrieve discovery result */
+                nfa_hci_cb.num_nfcee = NFA_HCI_MAX_HOST_IN_NETWORK;
+                NFA_EeGetInfo(&nfa_hci_cb.num_nfcee, nfa_hci_cb.ee_info);
+                for (int yy = 0; yy < nfa_hci_cb.num_nfcee; yy++) {
+                  nfa_hci_cb.ee_info[yy].hci_enable_state = NFA_HCI_FL_EE_NONE;
+                  nfa_hciu_add_host_resetting(
+                      (nfa_hci_cb.ee_info[yy].ee_handle & ~NFA_HANDLE_GROUP_EE),
+                      NFCEE_REINIT);
                   }
                   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
                          " NFCEE_UNRECOVERABLE_ERRROR  reset handling");
@@ -296,8 +300,11 @@ void nfa_hci_ee_info_cback(tNFA_EE_DISC_STS status) {
                      nfa_hci_cb.ee_info[nfa_hci_cb.next_nfcee_idx].hci_enable_state = NFA_HCI_FL_EE_ENABLED;
 
                      if(nfa_hci_cb.next_nfcee_idx < nfa_hci_cb.num_nfcee) {
-                       DLOG_IF(INFO, nfc_debug_enabled)
-                          << StringPrintf("NFCEE_UNRECOVERABLE_ERRROR reset handling");
+                       DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+                           "NFCEE_UNRECOVERABLE_ERRROR reset handling "
+                           "nfa_hci_cb.next_nfcee_idx %d  nfa_hci_cb.num_nfcee "
+                           "%d",
+                           nfa_hci_cb.next_nfcee_idx, nfa_hci_cb.num_nfcee);
                        if (nfa_hci_enable_one_nfcee() == false) {
                         DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("nfa_hci_enable_one_nfcee() failed");
                        }
@@ -311,7 +318,10 @@ void nfa_hci_ee_info_cback(tNFA_EE_DISC_STS status) {
                        evt_data.init_completed.status = NFA_STATUS_OK;
                        DLOG_IF(INFO, nfc_debug_enabled)
                           << StringPrintf("All NFCEE's Initialized");
-                         NFA_SCR_PROCESS_EVT(NFA_SCR_ESE_RECOVERY_COMPLETE_EVT, NFA_STATUS_OK);
+                       if ((nfa_ee_cb.ee_flags & NFA_EE_FLAG_RECOVERY) == NFA_EE_FLAG_RECOVERY) {
+                         nfa_ee_cb.ee_flags &= ~NFA_EE_FLAG_RECOVERY;
+                       }
+                       NFA_SCR_PROCESS_EVT(NFA_SCR_ESE_RECOVERY_COMPLETE_EVT, NFA_STATUS_OK);
 
                        nfa_hciu_send_to_all_apps(NFA_HCI_INIT_COMPLETED, &evt_data);
                      }
@@ -405,7 +415,9 @@ void nfa_hci_ee_info_cback(tNFA_EE_DISC_STS status) {
                 NFA_SCR_PROCESS_EVT(NFA_SCR_ESE_RECOVERY_START_EVT, NFA_STATUS_OK);
               }
               if(!nfa_hciu_is_host_reseting(nfa_ee_cb.ecb[ee_entry_index].nfcee_id)) {
-                nfa_hciu_add_host_resetting(nfa_ee_cb.ecb[ee_entry_index].nfcee_id, NFCEE_UNRECOVERABLE_ERRROR);
+                nfa_hciu_add_host_resetting(
+                    nfa_ee_cb.ecb[ee_entry_index].nfcee_id,
+                    NFCEE_UNRECOVERABLE_ERRROR | NFCEE_RECOVERY_IN_PROGRESS);
                 nfa_hci_release_transceive(nfa_ee_cb.ecb[ee_entry_index].nfcee_id, NFA_STATUS_HCI_UNRECOVERABLE_ERROR);
                 nfa_hci_cb.hci_state = NFA_HCI_STATE_IDLE;
                 nfa_hci_cb.curr_nfcee = nfa_ee_cb.ecb[ee_entry_index].nfcee_id;
@@ -417,7 +429,8 @@ void nfa_hci_ee_info_cback(tNFA_EE_DISC_STS status) {
                 }
               }
             }
-            nfa_hciu_add_host_resetting(nfa_hci_cb.curr_nfcee, NFCEE_UNRECOVERABLE_ERRROR);
+            nfa_hciu_add_host_resetting(nfa_hci_cb.curr_nfcee,
+                                          NFCEE_UNRECOVERABLE_ERRROR);
             break;
           }
           ee_entry_index++;
@@ -848,7 +861,6 @@ void nfa_hci_startup_complete(tNFA_STATUS status) {
 #if(NXP_EXTNS == TRUE)
   if ((nfa_ee_cb.ee_flags & NFA_EE_FLAG_RECOVERY) == NFA_EE_FLAG_RECOVERY) {
     nfa_ee_cb.ee_flags &= ~NFA_EE_FLAG_RECOVERY;
-    nfa_dm_act_start_rf_discovery(NULL);
   }
   if (nfcFL.eseFL._NCI_NFCEE_PWR_LINK_CMD) {
         if (nfa_hci_cb.next_nfcee_idx == nfa_hci_cb.num_nfcee) {
@@ -1164,7 +1176,6 @@ static void nfa_hci_conn_cback(uint8_t conn_id, tNFC_CONN_EVT event,
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
       "%s State: %u  Cmd: %u", __func__, nfa_hci_cb.hci_state, event);
 #if(NXP_EXTNS == TRUE)
-  tNFA_HCI_DYN_GATE         *p_gate;
   tNFA_HCI_PIPE_CMDRSP_INFO *p_pipe_cmdrsp_info = nullptr;
 #endif
 
@@ -1178,7 +1189,7 @@ static void nfa_hci_conn_cback(uint8_t conn_id, tNFC_CONN_EVT event,
       nfa_hciu_alloc_gate (NFA_HCI_GEN_PURPOSE_APDU_APP_GATE, NFA_HCI_APP_HANDLE_NONE);
       nfa_hciu_alloc_gate (NFA_HCI_ID_MNGMNT_APP_GATE, NFA_HCI_APP_HANDLE_NONE);
       nfa_hciu_alloc_gate (NFA_HCI_APDU_APP_GATE, NFA_HCI_APP_HANDLE_NONE);
-      p_gate = nfa_hciu_alloc_gate (NFA_HCI_APDU_GATE, NFA_HCI_APP_HANDLE_NONE);
+      nfa_hciu_alloc_gate (NFA_HCI_APDU_GATE, NFA_HCI_APP_HANDLE_NONE);
 
       /* Set flag waiting for EVT_ATR on APDU Pipes connected to different UICC host */
       //nfa_hciu_set_server_apdu_host_not_ready (p_gate);
@@ -1378,11 +1389,6 @@ static void nfa_hci_conn_cback(uint8_t conn_id, tNFC_CONN_EVT event,
 #if(NXP_EXTNS == TRUE)
   if (nfa_hci_cb.type == NFA_HCI_EVENT_TYPE) {
           /* Response APDU: stop the timers */
-
-      /*Do not stop the timer for WTX event, if atr response not received. This
-       * allows timeout in case atr response is not received at all, which helps
-       * upper layer API to get unblocked and take necessary action*/
-      if(!(p_pipe_cmdrsp_info->w4_atr_evt && nfa_hci_cb.inst == NFA_HCI_EVT_WTX))
       nfa_sys_stop_timer (&(p_pipe_cmdrsp_info->rsp_timer));
       if(p_pipe_cmdrsp_info->w4_rsp_apdu_evt) {
       /*Clear chaining resp pending once full resp is received*/
