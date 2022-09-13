@@ -34,6 +34,15 @@
  *  Copyright 2018-2021 NXP
  *
  ******************************************************************************/
+ /******************************************************************************
+ *
+ *  Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ *  Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *  SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
+ ******************************************************************************/
+
 /******************************************************************************
  *
  *  This file contains the Near Field Communication (NFC) API function
@@ -267,6 +276,9 @@ typedef uint8_t tNFC_STATUS;
 
 #define NFC_TL_SIZE 2
 #define NFC_SAVED_CMD_SIZE 2
+
+/*NFC secure zone event*/
+#define NFC_TZ_SECURE_ZONE_DISABLE_NFC_REVT 0xC01
 
 typedef tNCI_DISCOVER_MAPS tNFC_DISCOVER_MAPS;
 typedef tNCI_DISCOVER_PARAMS tNFC_DISCOVER_PARAMS;
