@@ -34,6 +34,14 @@
  *  Copyright 2018-2022 NXP
  *
  ******************************************************************************/
+ /******************************************************************************
+ *
+ *  Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ *  Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *  SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
+ ******************************************************************************/
 
 /******************************************************************************
  *
@@ -229,6 +237,10 @@ typedef uint8_t tNFA_PROTOCOL_MASK;
 
 #define NFA_DM_GEN_ERROR_REVT 12
 #endif
+
+/*secure zone event to disable NFC*/
+#define NFA_DM_TZ_SECURE_ZONE_DISABLE_NFC_EVT 0xC1
+
 /* T1T HR length            */
 #define NFA_T1T_HR_LEN T1T_HR_LEN
 /* Max UID length of T1/T2  */
