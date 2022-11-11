@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2021 NXP
+ *  Copyright 2018-2022 NXP
  *
  ******************************************************************************/
 /******************************************************************************
@@ -220,6 +220,8 @@ typedef uint8_t tNFA_EE_ECB_FLAGS;
 /* this bit is in ee_status for internal use only */
 #define NFA_EE_STATUS_INT_MASK 0x20
 
+#define NFA_EMPTY_AID_TLV_LEN 02
+
 /* NFA-EE information for a particular NFCEE Entity (including DH) */
 typedef struct {
   tNFA_TECHNOLOGY_MASK
@@ -316,6 +318,14 @@ typedef struct {
   uint8_t ee_req_op;             /* add or remove req ntf*/
 #endif
 } tNFA_EE_ECB;
+
+/* data type for Empty AID Index and ECB */
+typedef struct {
+  tNFA_EE_ECB *p_cb;
+  int8_t index;
+  bool addEmptyAidRoute;
+  int offset;
+} tNFA_EE_EMPTY_AID_ECB;
 
 /* data type for NFA_EE_API_DISCOVER_EVT */
 typedef struct {

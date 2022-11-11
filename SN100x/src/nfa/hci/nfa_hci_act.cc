@@ -1526,7 +1526,7 @@ void nfa_hci_handle_admin_gate_rsp(uint8_t* p_data, uint8_t data_len) {
           /* Set WHITELIST */
           nfa_hciu_send_set_param_cmd(
               NFA_HCI_ADMIN_PIPE, NFA_HCI_WHITELIST_INDEX,
-              p_nfa_hci_cfg->num_whitelist_host, p_nfa_hci_cfg->p_whitelist);
+              p_nfa_hci_cfg->num_allowlist_host, p_nfa_hci_cfg->p_allowlist);
         } else if (nfa_hci_cb.param_in_use == NFA_HCI_WHITELIST_INDEX) {
 #if (NXP_EXTNS == TRUE)
           DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
@@ -1545,13 +1545,15 @@ void nfa_hci_handle_admin_gate_rsp(uint8_t* p_data, uint8_t data_len) {
           if (NFA_GetNCIVersion() == NCI_VERSION_2_0) {
             nfa_hci_cb.hci_state = NFA_HCI_STATE_WAIT_NETWK_ENABLE;
             NFA_EeGetInfo(&nfa_hci_cb.num_nfcee, nfa_hci_cb.ee_info);
+#if (NXP_EXTNS == TRUE)
             if (nfa_hci_enable_one_nfcee() == false) {
               DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("nfa_hci_enable_one_nfcee() failed");
-#if (NXP_EXTNS == TRUE)
               nfa_hciu_send_get_param_cmd(NFA_HCI_ADMIN_PIPE,
                                           NFA_HCI_HOST_LIST_INDEX);
-#endif
             }
+#else
+            nfa_hci_enable_one_nfcee();
+#endif
           }
         }
         break;
@@ -1596,7 +1598,7 @@ void nfa_hci_handle_admin_gate_rsp(uint8_t* p_data, uint8_t data_len) {
             /* Session has not changed, Set WHITELIST */
             nfa_hciu_send_set_param_cmd(
                 NFA_HCI_ADMIN_PIPE, NFA_HCI_WHITELIST_INDEX,
-                p_nfa_hci_cfg->num_whitelist_host, p_nfa_hci_cfg->p_whitelist);
+                p_nfa_hci_cfg->num_allowlist_host, p_nfa_hci_cfg->p_allowlist);
           } else {
             /* Something wrong, NVRAM data could be corrupt or first start with
              * default session id */
@@ -2720,7 +2722,7 @@ void nfa_hci_handle_pending_host_reset() {
           nfa_hci_cb.curr_nfcee = nfa_hci_cb.reset_host[xx].host_id;
           nfa_hci_cb.next_nfcee_idx = 0x00;
           if (!nfa_hciu_check_host_resetting(nfa_hci_cb.reset_host[xx].host_id,
-                                           NFCEE_RECOVERY_IN_PROGRESS)) {
+                                             NFCEE_UNRECOVERABLE_ERRROR)) {
             if (NFC_NfceeDiscover(true) == NFC_STATUS_FAILED) {
               DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
                   "NFCEE_UNRECOVERABLE_ERRROR unable to handle");

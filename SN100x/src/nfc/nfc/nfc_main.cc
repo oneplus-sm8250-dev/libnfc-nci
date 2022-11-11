@@ -215,7 +215,7 @@ static std::string nfc_hal_event_name(uint8_t event) {
       return "HAL_NFC_RELEASE_CONTROL_EVT";
     case HAL_NFC_ERROR_EVT:
       return "HAL_NFC_ERROR_EVT";
-    case (uint32_t)NfcEvent::HCI_NETWORK_RESET:
+    case HAL_HCI_NETWORK_RESET:
       return "HCI_NETWORK_RESET";
     case HAL_TZ_SECURE_ZONE_DISABLE_NFC_EVT:
       return "HAL_TZ_SECURE_ZONE_DISABLE_NFC_EVT";
@@ -613,7 +613,7 @@ void nfc_main_handle_hal_evt(tNFC_HAL_EVT_MSG* p_msg) {
           }
           break;
 #if (NXP_EXTNS == FALSE)
-        case (uint32_t)NfcEvent::HCI_NETWORK_RESET:
+        case HAL_HCI_NETWORK_RESET:
           delete_stack_non_volatile_store(true);
           break;
 #endif
@@ -622,7 +622,7 @@ void nfc_main_handle_hal_evt(tNFC_HAL_EVT_MSG* p_msg) {
       }
       break;
 #if (NXP_EXTNS == TRUE)
-    case (uint32_t)NfcEvent::HCI_NETWORK_RESET:
+    case HAL_HCI_NETWORK_RESET:
       delete_stack_non_volatile_store(true);
       break;
 #endif
@@ -755,7 +755,7 @@ static void nfc_main_hal_cback(uint8_t event, tHAL_NFC_STATUS status) {
     case HAL_NFC_REQUEST_CONTROL_EVT:
     case HAL_NFC_RELEASE_CONTROL_EVT:
     case HAL_NFC_ERROR_EVT:
-    case (uint32_t)NfcEvent::HCI_NETWORK_RESET:
+    case HAL_HCI_NETWORK_RESET:
       nfc_main_post_hal_evt(event, status);
       break;
 #if (NXP_EXTNS == TRUE)
@@ -937,6 +937,8 @@ void NFC_Init(tHAL_NFC_ENTRY* p_hal_entry_tbl) {
   }
   if (NfcAdaptation::GetInstance().NFA_GetBootMode() == NFC_NORMAL_BOOT_MODE) {
 #endif
+  GKI_init_timer_list(&nfc_cb.timer_queue);
+  GKI_init_timer_list(&nfc_cb.quick_timer_queue);
   rw_init();
   ce_init();
   llcp_init();

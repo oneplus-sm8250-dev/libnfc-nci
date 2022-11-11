@@ -30,7 +30,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2019-2020 NXP
+ *  Copyright 2019-2020, 2022 NXP
  *
  ******************************************************************************/
 
@@ -348,6 +348,25 @@ void rw_t3t_process_error(tNFC_STATUS status) {
 void rw_t3t_start_poll_timer(tRW_T3T_CB* p_cb) {
   nfc_start_quick_timer(&p_cb->poll_timer, NFC_TTYPE_RW_T3T_RESPONSE,
                         RW_T3T_POLL_CMD_TIMEOUT_TICKS);
+}
+
+/*******************************************************************************
+**
+** Function         rw_t3t_handle_nci_poll_rsp
+**
+** Description      Handle NCI_T3T_POLLING_RSP
+**
+** Returns          none
+**
+*******************************************************************************/
+void rw_t3t_handle_nci_poll_rsp(uint8_t nci_status) {
+  if (nci_status != NFC_STATUS_OK) {
+    tRW_T3T_CB* p_cb = &rw_cb.tcb.t3t;
+    /* in case of STATUS_REJECTED or other errors, */
+    /* NFCC MAY NOT send RF_T3T_POLLING_NTF */
+    /* stop timer for poll response */
+    nfc_stop_quick_timer(&p_cb->poll_timer);
+  }
 }
 
 /*******************************************************************************
@@ -773,6 +792,12 @@ tNFC_STATUS rw_t3t_send_next_ndef_update_cmd(tRW_T3T_CB* p_cb) {
     /* Construct T3T message */
     p = p_cmd_start = (uint8_t*)(p_cmd_buf + 1) + p_cmd_buf->offset;
 
+#if (NXP_EXTNS == TRUE)
+    if (p_cb->ndef_msg_len < p_cb->ndef_msg_bytes_sent) {
+      return NFC_STATUS_FAILED;
+    }
+#endif
+
     /* Calculate number of ndef bytes remaining to write */
     ndef_bytes_remaining = p_cb->ndef_msg_len - p_cb->ndef_msg_bytes_sent;
 
@@ -913,6 +938,12 @@ tNFC_STATUS rw_t3t_send_next_ndef_check_cmd(tRW_T3T_CB* p_cb) {
   if (p_cmd_buf != nullptr) {
     /* Construct T3T message */
     p = p_cmd_start = (uint8_t*)(p_cmd_buf + 1) + p_cmd_buf->offset;
+
+#if (NXP_EXTNS == TRUE)
+    if (p_cb->ndef_attrib.ln < p_cb->ndef_rx_offset) {
+      return NFC_STATUS_FAILED;
+    }
+#endif
 
     /* Calculate number of ndef bytes remaining to read */
     ndef_bytes_remaining = p_cb->ndef_attrib.ln - p_cb->ndef_rx_offset;
