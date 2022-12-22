@@ -206,13 +206,11 @@ void GKI_start_timer(uint8_t tnum, int32_t ticks, bool is_continuous) {
   uint8_t task_id = GKI_get_taskid();
   bool bad_timer = false;
 
-#if (NXP_EXTNS == TRUE)
   if (task_id >= GKI_MAX_TASKS) {
-    LOG(ERROR) << StringPrintf(
-    "%s: invalid task_id:0x%02x. start timer failed", __func__, task_id);
+    LOG(ERROR) << StringPrintf("%s: invalid task_id:0x%02x. start timer failed",
+                               __func__, task_id);
     return;
   }
-#endif
 
   if (ticks <= 0) ticks = 1;
 
@@ -312,7 +310,6 @@ void GKI_stop_timer(uint8_t tnum) {
   uint8_t task_id = GKI_get_taskid();
 
   GKI_disable();
-
   if (task_id < GKI_MAX_TASKS) {
     switch (tnum) {
 #if (GKI_NUM_TIMERS > 0)
@@ -711,6 +708,14 @@ uint16_t GKI_update_timer_list(TIMER_LIST_Q* p_timer_listq,
   return (num_time_out);
 }
 
+bool GKI_timer_list_empty(TIMER_LIST_Q* p_timer_listq) {
+  return p_timer_listq->p_first == nullptr;
+}
+
+TIMER_LIST_ENT* GKI_timer_list_first(TIMER_LIST_Q* p_timer_listq) {
+  return p_timer_listq->p_first;
+}
+
 /*******************************************************************************
 **
 ** Function         GKI_get_remaining_ticks
@@ -928,6 +933,9 @@ void GKI_remove_from_timer_list(TIMER_LIST_Q* p_timer_listq,
         break;
       }
     }
+    /* Recovering from unexpected state.
+       e.g. when TIMER_LIST_ENT is cleared before stop */
+    if (p_timer_listq->last_ticks) p_timer_listq->last_ticks = 0;
   }
 
   return;

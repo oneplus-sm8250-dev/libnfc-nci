@@ -36,6 +36,14 @@
  ******************************************************************************/
 /******************************************************************************
  *
+ *  Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ *  Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *  SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
+ ******************************************************************************/
+/******************************************************************************
+ *
  *  This file contains the action functions for device manager state
  *  machine.
  *
@@ -487,6 +495,10 @@ static void nfa_dm_nfc_response_cback(tNFC_RESPONSE_EVT event,
         (*nfa_dm_cb.wlc_data->p_wlc_cback)(event, p_data->status);
       break;
 #endif
+
+    case NFC_TZ_SECURE_ZONE_DISABLE_NFC_REVT:
+      (*nfa_dm_cb.p_dm_cback)(NFA_DM_TZ_SECURE_ZONE_DISABLE_NFC_EVT, nullptr);
+      break;
 
     default:
       break;
@@ -1381,8 +1393,11 @@ bool nfa_dm_act_start_rf_discovery(__attribute__((unused))
 
   DLOG_IF(INFO, nfc_debug_enabled) << __func__;
 
-  if (nfa_dm_cb.disc_cb.disc_flags & NFA_DM_DISC_FLAGS_ENABLED ||
-      ((nfa_ee_cb.ee_flags & NFA_EE_FLAG_RECOVERY) == NFA_EE_FLAG_RECOVERY)) {
+  if (nfa_dm_cb.disc_cb.disc_flags & NFA_DM_DISC_FLAGS_ENABLED
+#if (NXP_EXTNS == TRUE)
+      || ((nfa_ee_cb.ee_flags & NFA_EE_FLAG_RECOVERY) == NFA_EE_FLAG_RECOVERY)
+#endif
+     ) {
     LOG(ERROR) << StringPrintf("Discovery start not required");
 
     evt_data.status = NFA_STATUS_OK;
@@ -2090,6 +2105,8 @@ std::string nfa_dm_nfc_revt_2_str(tNFC_RESPONSE_EVT event) {
     case NFC_RF_INTF_EXT_STOP_REVT:
       return "NFC_RF_INTF_EXT_STOP_EVT";
 #endif
+    case NFC_TZ_SECURE_ZONE_DISABLE_NFC_REVT:
+      return "NFC_TZ_SECURE_ZONE_DISABLE_NFC_REVT";
     default:
       return "unknown revt";
   }

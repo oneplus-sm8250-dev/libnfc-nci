@@ -34,6 +34,14 @@
  *  Copyright 2018-2022 NXP
  *
  ******************************************************************************/
+ /******************************************************************************
+ *
+ *  Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ *  Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *  SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
+ ******************************************************************************/
 
 /******************************************************************************
  *
@@ -229,6 +237,10 @@ typedef uint8_t tNFA_PROTOCOL_MASK;
 
 #define NFA_DM_GEN_ERROR_REVT 12
 #endif
+
+/*secure zone event to disable NFC*/
+#define NFA_DM_TZ_SECURE_ZONE_DISABLE_NFC_EVT 0xC1
+
 /* T1T HR length            */
 #define NFA_T1T_HR_LEN T1T_HR_LEN
 /* Max UID length of T1/T2  */
@@ -672,10 +684,10 @@ typedef struct {
   uint16_t hci_netwk_enable_timeout;
   /* Maximum time to wait for EE DISC REQ NTF(s) after HOT PLUG EVT(s) */
   uint16_t hcp_response_timeout;
-  /* Number of host in the whitelist of Terminal host */
-  uint8_t num_whitelist_host;
-  /* Whitelist of Terminal Host */
-  uint8_t* p_whitelist;
+  /* Number of host in the allowlist of Terminal host */
+  uint8_t num_allowlist_host;
+  /* Allowlist of Terminal Host */
+  uint8_t* p_allowlist;
 } tNFA_HCI_CFG;
 
 /*
