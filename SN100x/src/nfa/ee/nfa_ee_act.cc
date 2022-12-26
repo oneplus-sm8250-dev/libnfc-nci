@@ -41,7 +41,7 @@
  ******************************************************************************/
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
-#include <statslog.h>
+#include <statslog_nfc.h>
 #include <string.h>
 
 #include "include/debug_lmrt.h"
@@ -1431,8 +1431,8 @@ void nfa_ee_api_add_aid(tNFA_EE_MSG* p_data) {
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
       "status:%d ee_cfged:0x%02x ", evt_data.status, nfa_ee_cb.ee_cfged);
   if (evt_data.status == NFA_STATUS_BUFFER_FULL)
-    android::util::stats_write(android::util::NFC_ERROR_OCCURRED,
-                               (int32_t)AID_OVERFLOW, 0, 0);
+    nfc::stats::stats_write(nfc::stats::NFC_ERROR_OCCURRED,
+                            (int32_t)AID_OVERFLOW, 0, 0);
   /* report the status of this operation */
   nfa_ee_report_event(p_cb->p_ee_cback, NFA_EE_ADD_AID_EVT, &evt_data);
 }
@@ -2437,7 +2437,7 @@ static void nfa_ee_build_discover_req_evt(tNFA_EE_DISCOVER_REQ* p_evt_data) {
 
   for (xx = 0; xx < nfa_ee_cb.cur_ee; xx++, p_cb++) {
     if ((p_cb->ee_status & NFA_EE_STATUS_INT_MASK) ||
-        (p_cb->ee_status != NFA_EE_STATUS_ACTIVE) ) {
+        (p_cb->ee_status != NFA_EE_STATUS_ACTIVE)) {
       continue;
     }
     p_info->ee_handle = (tNFA_HANDLE)p_cb->nfcee_id | NFA_HANDLE_GROUP_EE;
@@ -2746,7 +2746,8 @@ void nfa_ee_nci_conn(tNFA_EE_MSG* p_data) {
             evt_data.data.len = p_pkt->len;
             evt_data.data.p_buf = (uint8_t*)(p_pkt + 1) + p_pkt->offset;
             event = NFA_EE_DATA_EVT;
-            p_pkt = nullptr; /* so this function does not free this GKI buffer */
+            p_pkt = nullptr;
+            /* so this function does not free this GKI buffer */
           }
         }
         break;

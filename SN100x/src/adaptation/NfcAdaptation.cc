@@ -29,7 +29,7 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 *
-*  Copyright 2018-2021 NXP
+*  Copyright 2018-2022 NXP
 *
 ******************************************************************************/
 #include <aidl/android/hardware/nfc/BnNfc.h>
@@ -55,8 +55,11 @@
 #include "NfcAdaptation.h"
 #include "debug_nfcsnoop.h"
 #if (NXP_EXTNS == TRUE)
+#include <hidl/LegacySupport.h>
+#include <memunreachable/memunreachable.h>
 #include <vendor/nxp/hardware/nfc/2.0/INqNfc.h>
 #include <hidl/LegacySupport.h>
+#include <aidl/vendor/nxp/nxpnfc_aidl/INxpNfc.h>
 #endif
 #include "nfa_api.h"
 #include "nfa_rw_api.h"
@@ -96,12 +99,16 @@ using Status = ::ndk::ScopedAStatus;
 
 std::string NFC_AIDL_HAL_SERVICE_NAME = "android.hardware.nfc.INfc/default";
 #if (NXP_EXTNS == TRUE)
+std::string NXPNFC_AIDL_HAL_SERVICE_NAME =
+    "vendor.nxp.nxpnfc_aidl.INxpNfc/default";
 using android::hardware::configureRpcThreadpool;
-using vendor::nxp::hardware::nfc::V2_0::INqNfc;
+using INqNfc = vendor::nxp::hardware::nfc::V2_0::INqNfc;
+using INxpNfcAidl = ::aidl::vendor::nxp::nxpnfc_aidl::INxpNfc;
 using ::android::hardware::nfc::V1_0::NfcStatus;
 
 ThreadMutex NfcAdaptation::sIoctlLock;
 sp<INqNfc> NfcAdaptation::mNqHal_2_0;
+std::shared_ptr<INxpNfcAidl> NfcAdaptation::mAidlHalNxpNfc;
 #endif
 extern bool nfc_debug_enabled;
 
@@ -249,6 +256,10 @@ class NfcAidlClientCallback
                                  NfcAidlStatus event_status) override {
     uint8_t e_num;
     uint8_t s_num;
+#if (NXP_EXTNS == TRUE)
+    DLOG_IF(INFO, nfc_debug_enabled)
+        << StringPrintf("%s: sendEvent %d", __func__, (int)event);
+#endif
     switch (event) {
       case NfcAidlEvent::OPEN_CPLT:
         e_num = HAL_NFC_OPEN_CPLT_EVT;
@@ -267,7 +278,15 @@ class NfcAidlClientCallback
         break;
       case NfcAidlEvent::ERROR:
       default:
+#if (NXP_EXTNS == TRUE)
+        if ((int)event == HAL_NFC_FW_UPDATE_STATUS_EVT) {
+          e_num = HAL_NFC_FW_UPDATE_STATUS_EVT;
+        } else {
+          e_num = HAL_NFC_ERROR_EVT;
+        }
+#else
         e_num = HAL_NFC_ERROR_EVT;
+#endif
     }
     switch (event_status) {
       case NfcAidlStatus::OK:
@@ -689,7 +708,14 @@ void NfcAdaptation::DeviceShutdown() {
 ** Returns:     None.
 **
 *******************************************************************************/
-void NfcAdaptation::Dump(int fd) { debug_nfcsnoop_dump(fd); }
+void NfcAdaptation::Dump(int fd) {
+  debug_nfcsnoop_dump(fd);
+#if (NXP_EXTNS == TRUE)
+  DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("\n LibNfc MemoryLeak Info =  %s \n",
+                      android::GetUnreachableMemoryString(true, 10000).c_str());
+#endif
+}
 
 /*******************************************************************************
 **
@@ -758,6 +784,39 @@ uint32_t NfcAdaptation::Thread(__attribute__((unused)) uint32_t arg) {
 *******************************************************************************/
 tHAL_NFC_ENTRY* NfcAdaptation::GetHalEntryFuncs() { return &mHalEntryFuncs; }
 
+#if (NXP_EXTNS == TRUE)
+/*******************************************************************************
+**
+** Function:    NfcAdaptation::InitializeAidlHalContext
+**
+** Description: Get the NxpNfc interface Service
+**
+** Returns:     None.
+**
+*******************************************************************************/
+void NfcAdaptation::InitializeAidlHalContext() {
+  const char* func = "NfcAdaptation::InitializeAidlHalContext";
+  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s", func);
+  ::ndk::SpAIBinder binder(
+
+      AServiceManager_getService(NXPNFC_AIDL_HAL_SERVICE_NAME.c_str()));
+  mAidlHalNxpNfc = INxpNfcAidl::fromBinder(binder);
+  if (mAidlHalNxpNfc == nullptr) {
+    LOG(INFO) << StringPrintf("%s: HIDL INxpNfc::tryGetService()", func);
+    mNqHal_2_0 = INqNfc::tryGetService();
+    if (mNqHal_2_0 != nullptr) {
+      DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+          "%s: INqNfc::getService() returned %p (%s)", func, mNqHal_2_0.get(),
+          (mNqHal_2_0->isRemote() ? "remote" : "local"));
+    }
+  } else {
+    mNqHal_2_0 = nullptr;
+    LOG(INFO) << StringPrintf("%s: INxpNfcAidl::fromBinder returned", func);
+    LOG_FATAL_IF(mAidlHalNxpNfc == nullptr,
+                 "Failed to retrieve the NXPNFC AIDL!");
+  }
+}
+#endif
 /*******************************************************************************
 **
 ** Function:    NfcAdaptation::InitializeHalDeviceContext
@@ -767,6 +826,7 @@ tHAL_NFC_ENTRY* NfcAdaptation::GetHalEntryFuncs() { return &mHalEntryFuncs; }
 ** Returns:     None.
 **
 *******************************************************************************/
+
 void NfcAdaptation::InitializeHalDeviceContext() {
   const char* func = "NfcAdaptation::InitializeHalDeviceContext";
 
@@ -813,14 +873,7 @@ void NfcAdaptation::InitializeHalDeviceContext() {
     mHal->linkToDeath(mNfcHalDeathRecipient, 0);
   }
 #if (NXP_EXTNS == TRUE)
-  LOG(INFO) << StringPrintf("%s: INqNfc::tryGetService()", func);
-  mNqHal_2_0 = INqNfc::tryGetService();
-  if (mNqHal_2_0 != nullptr) {
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: INqNfc::getService() returned %p (%s)",
-             func, mNqHal_2_0.get(),
-             (mNqHal_2_0->isRemote() ? "remote" : "local"));
-  }
-
+  InitializeAidlHalContext();
   mHalEntryFuncs.set_transit_config = HalSetTransitConfig;
 
   nfcBootMode = NFA_NORMAL_BOOT_MODE;
@@ -972,7 +1025,10 @@ string NfcAdaptation::HalGetProperty(string key) {
   string value;
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: enter key %s", __func__, key.c_str());
-  if (mNqHal_2_0 != NULL) {
+
+  if (mAidlHalNxpNfc != nullptr) {
+    mAidlHalNxpNfc->getVendorParam(key, &value);
+  } else if (mNqHal_2_0 != NULL) {
     /* Synchronous HIDL call, will be returned only after
      * HalGetProperty_cb() is called from HAL*/
     mNqHal_2_0->getVendorParam(key, HalGetProperty_cb);
@@ -980,7 +1036,7 @@ string NfcAdaptation::HalGetProperty(string key) {
     propVal.assign(""); /* Clear the global string variable  */
   } else {
     DLOG_IF(INFO, nfc_debug_enabled)
-        << StringPrintf("%s: mNqHal_2_0 is NULL", __func__);
+        << StringPrintf("%s: mNqHal_2_0 and mAidlHalNxpNfc is NULL", __func__);
   }
 
   return value;
@@ -999,11 +1055,13 @@ string NfcAdaptation::HalGetProperty(string key) {
  *******************************************************************************/
 bool NfcAdaptation::HalSetProperty(string key, string value) {
   bool status = false;
-  if (mNqHal_2_0 != NULL) {
+  if (mAidlHalNxpNfc != nullptr) {
+    mAidlHalNxpNfc->setVendorParam(key, value, &status);
+  } else if (mNqHal_2_0 != NULL) {
     status = mNqHal_2_0->setVendorParam(key, value);
   } else {
     DLOG_IF(INFO, nfc_debug_enabled)
-        << StringPrintf("%s: mNqHal_2_0 is NULL", __func__);
+        << StringPrintf("%s: mNqHal_2_0 and mAidlHalNxpNfc is NULL", __func__);
   }
   return status;
 }
@@ -1022,11 +1080,13 @@ bool NfcAdaptation::HalSetProperty(string key, string value) {
  *******************************************************************************/
 bool NfcAdaptation::HalSetTransitConfig(char * strval) {
   bool status = false;
-  if (mNqHal_2_0 != NULL) {
+  if (mAidlHalNxpNfc != nullptr) {
+    mAidlHalNxpNfc->setNxpTransitConfig(strval, &status);
+  } else if (mNqHal_2_0 != NULL) {
     status = mNqHal_2_0->setNxpTransitConfig(strval);
   } else {
     DLOG_IF(INFO, nfc_debug_enabled)
-        << StringPrintf("%s: mNqHal_2_0 is NULL", __func__);
+        << StringPrintf("%s: mNqHal_2_0 and mAidlHalNxpNfc is NULL", __func__);
   }
   return status;
 }
@@ -1053,7 +1113,15 @@ bool NfcAdaptation::resetEse(uint64_t level) {
 
   ALOGD_IF(nfc_debug_enabled, "%s : Enter", func);
 
-  if (mNqHal_2_0 != nullptr) {
+  if (mAidlHalNxpNfc != nullptr) {
+    mAidlHalNxpNfc->resetEse(level, &ret);
+    if (ret) {
+      DLOG_IF(INFO, nfc_debug_enabled)
+          << StringPrintf("NfcAdaptation::resetEse mAidlHalNxpNfc completed");
+    } else {
+      ALOGE("NfcAdaptation::resetEse mAidlHalNxpNfc failed");
+    }
+  } else if (mNqHal_2_0 != nullptr) {
     ret = mNqHal_2_0->resetEse(level);
     if(ret){
       ALOGE("NfcAdaptation::resetEse mNqHal_2_0 completed");
@@ -1254,14 +1322,10 @@ bool NfcAdaptation::DownloadFirmware() {
   if (0 != sem_init(&mSemHalDataCallBackEvent, 0, 0)) {
     return isDownloadFirmwareCompleted;
   }
-  mCallback = new NfcClientCallback(HalDownloadFirmwareCallback, HalDownloadFirmwareDataCallback);
-  if (mHal_1_1 != nullptr) {
-    status = mHal_1_1->open_1_1(mCallback);
-  } else {
-    status = mHal->open(mCallback);
-  }
-  if(status == NfcStatus::OK){
-    mHalOpenCompletedEvent.wait();
+  HalOpen(HalDownloadFirmwareCallback, HalDownloadFirmwareDataCallback);
+  mHalOpenCompletedEvent.wait();
+
+  {
     uint8_t cmd_reset_nci[] = {0x20, 0x00, 0x01, 0x00};
     uint8_t cmd_reset_nci_size = sizeof(cmd_reset_nci) / sizeof(uint8_t);
     uint8_t cmd_init_nci[] = {0x20, 0x01, 0x02, 0x00, 0x00};
@@ -1271,7 +1335,7 @@ bool NfcAdaptation::DownloadFirmware() {
     uint8_t p_core_init_rsp_params = 0;
     HalCoreInitialized(sizeof(uint8_t), &p_core_init_rsp_params);
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: try close HAL", func);
-    status =mHal->close();
+    HalClose();
   }
   if (NfcAdaptation::GetInstance().p_fwupdate_status_cback &&
           (fw_dl_status != (uint8_t)NfcHalFwUpdateStatus::HAL_NFC_FW_UPDATE_INVALID)) {
@@ -1348,18 +1412,12 @@ void NfcAdaptation::HalDownloadFirmwareCallback(nfc_event_t event,
       DLOG_IF(INFO, nfc_debug_enabled)
           << StringPrintf("%s: HAL_NFC_OPEN_CPLT_EVT", func);
       if (event_status == HAL_NFC_STATUS_OK) isDownloadFirmwareCompleted = true;
-#if (NXP_EXTNS == TRUE)
-    if(event_status == HAL_NFC_STATUS_OK)
-#endif
       mHalOpenCompletedEvent.signal();
       break;
     }
     case HAL_NFC_CLOSE_CPLT_EVT: {
       DLOG_IF(INFO, nfc_debug_enabled)
           << StringPrintf("%s: HAL_NFC_CLOSE_CPLT_EVT", func);
-#if (NXP_EXTNS == TRUE)
-     if(event_status == HAL_NFC_STATUS_OK)
-#endif
       break;
     }
   }
