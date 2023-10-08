@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2020 NXP
+ *  Copyright 2018-2020, 2022 NXP
  *
  ******************************************************************************/
 /******************************************************************************
@@ -283,7 +283,6 @@ typedef struct {
 } tNFC_FWUpdate_Info_t;
 #endif
 
-#define HAL_NFC_FW_UPDATE_STATUS_EVT 0xA
 /*****************************************************************************
 **  EXTERNAL FUNCTION DECLARATIONS
 *****************************************************************************/
@@ -334,6 +333,7 @@ extern void nfc_ncif_proc_get_routing(uint8_t* p, uint8_t len);
 extern void nfc_ncif_proc_conn_create_rsp(uint8_t* p, uint16_t plen,
                                           uint8_t dest_type);
 extern void nfc_ncif_report_conn_close_evt(uint8_t conn_id, tNFC_STATUS status);
+extern void nfc_ncif_proc_t3t_polling_rsp(uint8_t status);
 extern void nfc_ncif_proc_t3t_polling_ntf(uint8_t* p, uint16_t plen);
 extern void nfc_ncif_proc_reset_rsp(uint8_t* p, bool is_ntf);
 extern void nfc_ncif_proc_init_rsp(NFC_HDR* p_msg);

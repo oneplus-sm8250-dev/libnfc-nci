@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2021 NXP
+ *  Copyright 2018-2023 NXP
  *
  ******************************************************************************/
  /******************************************************************************
@@ -65,9 +65,11 @@
 #define NXP_EN_SN110U    1
 #define NXP_EN_SN100U    1
 #define NXP_EN_SN220U    1
+#define NXP_EN_PN560     1
 #define NXP_EN_PN557     1
-#define NXP_ANDROID_VER (13U)        /* NXP android version */
-#define NFC_NXP_MW_VERSION_MAJ (0x03) /* MW Major Version */
+#define NXP_EN_SN300U    1
+#define NXP_ANDROID_VER (14U)        /* NXP android version */
+#define NFC_NXP_MW_VERSION_MAJ (0x05) /* MW Major Version */
 #define NFC_NXP_MW_VERSION_MIN (0x00) /* MW Minor Version */
 #define NFC_NXP_MW_CUSTOMER_ID (0x00) /* MW Customer Id */
 #define NFC_NXP_MW_RC_VERSION  (0x00) /* MW RC Version */
@@ -82,6 +84,9 @@
 
 #define NFC_NXP_FW_SN220U_ROMCODE_VERISON (0x01) /*FW sn220u ROM CODE VERSION*/
 #define NFC_NXP_FW_SN220U_MAJOR_VERSION (0x01) /*sFWu sn220u firmware major version*/
+
+#define NFC_NXP_FW_SN300U_ROMCODE_VERISON (0x02) /*FW sn300u ROM CODE VERSION*/
+#define NFC_NXP_FW_SN300U_MAJOR_VERSION (0x20) /*sFWu sn300u firmware major version*/
 
 #endif
 /* NFC application return status codes */
@@ -184,6 +189,7 @@ typedef uint8_t tNFC_STATUS;
 #define NXP_NFC_RESET_MSB(x) (x &= 0x7F)
 #define NXP_NFC_ESE_CONN_PIPE_STATUS  ((unsigned char)0x22)
 #define NXP_NFC_ESE_APDU_PIPE_STATUS  ((unsigned char)0x23)
+#define NXP_NFC_EUICC_APDU_PIPE_STATUS ((unsigned char)0x12)
 /**********************************************
  * NFC Config Parameter IDs defined by NXP NFC
  **********************************************/
@@ -277,9 +283,6 @@ typedef uint8_t tNFC_STATUS;
 #define NFC_TL_SIZE 2
 #define NFC_SAVED_CMD_SIZE 2
 
-/*NFC secure zone event*/
-#define NFC_TZ_SECURE_ZONE_DISABLE_NFC_REVT 0xC01
-
 typedef tNCI_DISCOVER_MAPS tNFC_DISCOVER_MAPS;
 typedef tNCI_DISCOVER_PARAMS tNFC_DISCOVER_PARAMS;
 
@@ -326,6 +329,8 @@ enum {
   NFC_RF_INTF_EXT_STOP_REVT,      /* RF Intf Ext stop response     */
   NFC_NFCEE_MODE_SET_INFO         /* NFCEE Mode Set Notification event*/
 #endif
+  ,
+  NFC_TZ_SECURE_ZONE_DISABLE_NFC_REVT  /* TZ secure zone event to switch OFF NFC */
 };
 typedef uint16_t tNFC_RESPONSE_EVT;
 

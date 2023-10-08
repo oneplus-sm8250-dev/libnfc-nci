@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2021 NXP
+ *  Copyright 2018-2022 NXP
  *
  ******************************************************************************/
 
@@ -40,11 +40,10 @@
  *  This file contains the action functions the NFA_RW state machine.
  *
  ******************************************************************************/
-#include <log/log.h>
-#include <string.h>
-
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
+#include <log/log.h>
+#include <string.h>
 
 #include "ndef_utils.h"
 #include "nfa_dm_int.h"
@@ -1545,6 +1544,13 @@ static void nfa_rw_handle_mfc_evt(tRW_EVENT event, tRW_DATA* p_rw_data) {
     /* NDEF write completed or failed*/
     case RW_MFC_NDEF_WRITE_CPLT_EVT:
     case RW_MFC_NDEF_WRITE_FAIL_EVT:
+#if (NXP_EXTNS == TRUE)
+      if (nfa_rw_cb.cur_op == NFA_RW_OP_WRITE_NDEF) {
+        /* Update local cursize of ndef message */
+        nfa_rw_cb.ndef_cur_size = nfa_rw_cb.ndef_wr_len;
+      }
+#endif
+
       /* Command complete - perform cleanup, notify the app */
       nfa_rw_command_complete();
       nfa_dm_act_conn_cback_notify(NFA_WRITE_CPLT_EVT, &conn_evt_data);
@@ -2483,11 +2489,7 @@ static bool nfa_rw_i93_command(tNFA_RW_MSG* p_data) {
 
     case NFA_RW_OP_I93_STAY_QUIET:
       i93_command = I93_CMD_STAY_QUIET;
-#if (NXP_EXTNS == TRUE)
       status = RW_I93StayQuiet(p_data->op_req.params.i93_cmd.uid);
-#else
-      status = RW_I93StayQuiet(p_data->op_req.params.i93_cmd.p_data);
-#endif
       break;
 
     case NFA_RW_OP_I93_READ_SINGLE_BLOCK:

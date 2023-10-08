@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2022 NXP
+ *  Copyright 2018-2023 NXP
  *
  ******************************************************************************/
 /******************************************************************************
@@ -497,7 +497,9 @@ static void nfa_dm_nfc_response_cback(tNFC_RESPONSE_EVT event,
 #endif
 
     case NFC_TZ_SECURE_ZONE_DISABLE_NFC_REVT:
-      (*nfa_dm_cb.p_dm_cback)(NFA_DM_TZ_SECURE_ZONE_DISABLE_NFC_EVT, nullptr);
+      dm_cback_data.rf_field.status = NFA_STATUS_OK;
+      dm_cback_data.rf_field.rf_field_status = p_data->rf_field.rf_field;
+      (*nfa_dm_cb.p_dm_cback)(NFA_DM_TZ_SECURE_ZONE_DISABLE_NFC_EVT, &dm_cback_data);
       break;
 
     default:
@@ -1393,8 +1395,11 @@ bool nfa_dm_act_start_rf_discovery(__attribute__((unused))
 
   DLOG_IF(INFO, nfc_debug_enabled) << __func__;
 
-  if (nfa_dm_cb.disc_cb.disc_flags & NFA_DM_DISC_FLAGS_ENABLED ||
-      ((nfa_ee_cb.ee_flags & NFA_EE_FLAG_RECOVERY) == NFA_EE_FLAG_RECOVERY)) {
+  if (nfa_dm_cb.disc_cb.disc_flags & NFA_DM_DISC_FLAGS_ENABLED
+#if (NXP_EXTNS == TRUE)
+      || ((nfa_ee_cb.ee_flags & NFA_EE_FLAG_RECOVERY) == NFA_EE_FLAG_RECOVERY)
+#endif
+     ) {
     LOG(ERROR) << StringPrintf("Discovery start not required");
 
     evt_data.status = NFA_STATUS_OK;
@@ -1781,6 +1786,19 @@ static void nfa_dm_poll_disc_cback(tNFA_DM_RF_DISC_EVT event,
                 nfa_dm_cb.p_activate_ntf = nullptr;
               }
             } else {
+#if (NXP_EXTNS == TRUE)
+              DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+                  "sel_res:0x%02X, interface:0x%02X",
+                  nfa_dm_cb.disc_cb.activated_sel_res, nfc_cb.nci_interfaces);
+              /* if NFC_DEP interface is not supported, restart the discovery */
+              if (nfa_dm_cb.disc_cb.activated_sel_res ==
+                      NCI_PARAM_SEL_INFO_NFCDEP &&
+                  (!(nfc_cb.nci_interfaces & (1 << NCI_INTERFACE_NFC_DEP)))) {
+                /* deactivate and restart RF discovery */
+                nfa_dm_rf_deactivate(NFA_DEACTIVATE_TYPE_DISCOVERY);
+                break;
+              }
+#endif
               DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("P2P is paused");
               nfa_dm_notify_activation_status(NFA_STATUS_OK, nullptr);
             }

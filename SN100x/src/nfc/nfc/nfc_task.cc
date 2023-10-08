@@ -32,7 +32,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2019,2021 NXP
+ *  Copyright 2018-2019,2021-2022 NXP
  *
  ******************************************************************************/
 
@@ -65,6 +65,8 @@
 using android::base::StringPrintf;
 
 extern bool nfc_debug_enabled;
+extern bool nfc_nci_reset_keep_cfg_enabled;
+extern uint8_t nfc_nci_reset_type;
 
 /*******************************************************************************
 **
@@ -81,7 +83,7 @@ void nfc_start_timer(TIMER_LIST_ENT* p_tle, uint16_t type, uint32_t timeout) {
   NFC_HDR* p_msg;
 
   /* if timer list is currently empty, start periodic GKI timer */
-  if (nfc_cb.timer_queue.p_first == nullptr) {
+  if (GKI_timer_list_empty(&nfc_cb.timer_queue)) {
     /* if timer starts on other than NFC task (scritp wrapper) */
     if (GKI_get_taskid() != NFC_TASK) {
       /* post event to start timer in NFC task */
@@ -131,8 +133,9 @@ void nfc_process_timer_evt(void) {
 
   GKI_update_timer_list(&nfc_cb.timer_queue, 1);
 
-  while ((nfc_cb.timer_queue.p_first) && (!nfc_cb.timer_queue.p_first->ticks)) {
-    p_tle = nfc_cb.timer_queue.p_first;
+  while (!GKI_timer_list_empty(&nfc_cb.timer_queue) &&
+         !GKI_timer_list_first(&nfc_cb.timer_queue)->ticks) {
+    p_tle = GKI_timer_list_first(&nfc_cb.timer_queue);
     GKI_remove_from_timer_list(&nfc_cb.timer_queue, p_tle);
 #if(NXP_EXTNS == TRUE)
     /*Ignore expired timer when NFC off is in progress*/
@@ -174,7 +177,7 @@ void nfc_process_timer_evt(void) {
   }
 
   /* if timer list is empty stop periodic GKI timer */
-  if (nfc_cb.timer_queue.p_first == nullptr) {
+  if (GKI_timer_list_empty(&nfc_cb.timer_queue)) {
     GKI_stop_timer(NFC_TIMER_ID);
   }
 }
@@ -192,7 +195,7 @@ void nfc_stop_timer(TIMER_LIST_ENT* p_tle) {
   GKI_remove_from_timer_list(&nfc_cb.timer_queue, p_tle);
 
   /* if timer list is empty stop periodic GKI timer */
-  if (nfc_cb.timer_queue.p_first == nullptr) {
+  if (GKI_timer_list_empty(&nfc_cb.timer_queue)) {
     GKI_stop_timer(NFC_TIMER_ID);
   }
 }
@@ -215,7 +218,7 @@ void nfc_start_quick_timer(TIMER_LIST_ENT* p_tle, uint16_t type,
   NFC_HDR* p_msg;
 
   /* if timer list is currently empty, start periodic GKI timer */
-  if (nfc_cb.quick_timer_queue.p_first == nullptr) {
+  if (GKI_timer_list_empty(&nfc_cb.quick_timer_queue)) {
     /* if timer starts on other than NFC task (scritp wrapper) */
     if (GKI_get_taskid() != NFC_TASK) {
       /* post event to start timer in NFC task */
@@ -253,7 +256,7 @@ void nfc_stop_quick_timer(TIMER_LIST_ENT* p_tle) {
   GKI_remove_from_timer_list(&nfc_cb.quick_timer_queue, p_tle);
 
   /* if timer list is empty stop periodic GKI timer */
-  if (nfc_cb.quick_timer_queue.p_first == nullptr) {
+  if (GKI_timer_list_empty(&nfc_cb.quick_timer_queue)) {
     GKI_stop_timer(NFC_QUICK_TIMER_ID);
   }
 }
@@ -272,9 +275,10 @@ void nfc_process_quick_timer_evt(void) {
 
   GKI_update_timer_list(&nfc_cb.quick_timer_queue, 1);
 
-  while ((nfc_cb.quick_timer_queue.p_first) &&
-         (!nfc_cb.quick_timer_queue.p_first->ticks)) {
-    p_tle = nfc_cb.quick_timer_queue.p_first;
+  while (!GKI_timer_list_empty(&nfc_cb.quick_timer_queue) &&
+         (!GKI_timer_list_first(&nfc_cb.quick_timer_queue)->ticks)) {
+    p_tle = GKI_timer_list_first(&nfc_cb.quick_timer_queue);
+
     GKI_remove_from_timer_list(&nfc_cb.quick_timer_queue, p_tle);
 
     switch (p_tle->event) {
@@ -325,7 +329,7 @@ void nfc_process_quick_timer_evt(void) {
   }
 
   /* if timer list is empty stop periodic GKI timer */
-  if (nfc_cb.quick_timer_queue.p_first == nullptr) {
+  if (GKI_timer_list_empty(&nfc_cb.quick_timer_queue)) {
     GKI_stop_timer(NFC_QUICK_TIMER_ID);
   }
 }
@@ -401,11 +405,30 @@ uint32_t nfc_task(__attribute__((unused)) uint32_t arg) {
 
       /* Reset the NFC controller. */
       nfc_set_state(NFC_STATE_CORE_INIT);
+
+      /* Reset NCI configurations base on NAME_NCI_RESET_TYPE setting */
+      if (nfc_nci_reset_type == 0x02
 #if (NXP_EXTNS == TRUE)
-      nci_snd_core_reset(NCI_RESET_TYPE_KEEP_CFG);
-#else
-      nci_snd_core_reset(NCI_RESET_TYPE_RESET_CFG);
+          || nfc_nci_reset_keep_cfg_enabled
 #endif
+      ) {
+        /* 0x02, keep configurations. */
+        nci_snd_core_reset(NCI_RESET_TYPE_KEEP_CFG);
+        nfc_nci_reset_keep_cfg_enabled = true;
+      } else if (nfc_nci_reset_type == 0x01 &&
+                 !nfc_nci_reset_keep_cfg_enabled) {
+        /* 0x01, reset configurations only once every boot. */
+#if (NXP_EXTNS == TRUE)
+        nci_snd_core_reset(NCI_RESET_TYPE_RESET_CFG);
+#else
+        nci_snd_core_reset(NCI_RESET_TYPE_KEEP_CFG);
+#endif
+        nfc_nci_reset_keep_cfg_enabled = true;
+      } else {
+        /* Default, reset configurations every time*/
+        nci_snd_core_reset(NCI_RESET_TYPE_RESET_CFG);
+        nfc_nci_reset_keep_cfg_enabled = false;
+      }
     }
 
     if (event & NFC_MBOX_EVT_MASK) {
@@ -466,6 +489,12 @@ uint32_t nfc_task(__attribute__((unused)) uint32_t arg) {
     if (event & NFA_TIMER_EVT_MASK) {
       nfa_sys_timer_update();
     }
+
+#if(NXP_EXTNS == TRUE)
+    if (event & EVENT_MASK(GKI_SHUTDOWN_EVT)) {
+      break;
+    }
+#endif
   }
 
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("nfc_task terminated");

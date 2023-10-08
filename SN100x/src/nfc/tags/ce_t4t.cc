@@ -40,18 +40,16 @@
  *  mode.
  *
  ******************************************************************************/
-#include <log/log.h>
-#include <string.h>
-
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
-
-#include "nfc_target.h"
+#include <log/log.h>
+#include <string.h>
 
 #include "bt_types.h"
 #include "ce_api.h"
 #include "ce_int.h"
 #include "nfc_int.h"
+#include "nfc_target.h"
 #include "tags_int.h"
 
 using android::base::StringPrintf;
@@ -653,9 +651,7 @@ static void ce_t4t_data_cback(uint8_t conn_id, tNFC_CONN_EVT event,
     } else {
       GKI_freebuf(p_c_apdu);
       ce_t4t_send_status(T4T_RSP_NOT_FOUND);
-#if (NXP_EXTNS == TRUE)
       return;
-#endif
     }
   } else if (ce_cb.mem.t4t.status & CE_T4T_STATUS_WILDCARD_AID_SELECTED) {
     DLOG_IF(INFO, nfc_debug_enabled)

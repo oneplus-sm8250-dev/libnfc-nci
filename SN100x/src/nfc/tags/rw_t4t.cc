@@ -31,7 +31,7 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 *
-*  Copyright 2018-2021 NXP
+*  Copyright 2018-2022 NXP
 *
 ******************************************************************************/
 
@@ -41,17 +41,15 @@
  *  mode.
  *
  ******************************************************************************/
-#include <log/log.h>
-#include <string.h>
-
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
-
-#include "nfc_target.h"
+#include <log/log.h>
+#include <string.h>
 
 #include "bt_types.h"
 #include "nfc_api.h"
 #include "nfc_int.h"
+#include "nfc_target.h"
 #include "rw_api.h"
 #include "rw_int.h"
 #if (NXP_EXTNS == TRUE)
@@ -1106,6 +1104,15 @@ static bool rw_t4t_update_file(void) {
 #endif
         return false;
       }
+
+#if (NXP_EXTNS == TRUE)
+      if (data_length > RW_T4T_MAX_DATA_PER_WRITE) {
+        LOG(ERROR) << StringPrintf("%s - Invalid data_length (0x%X)",
+                    __func__, data_length);
+        GKI_freebuf(p_c_apdu);
+        return false;
+      }
+#endif
 
       memcpy(p, p_t4t->p_update_data, data_length);
 
